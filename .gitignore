@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+var/
+node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+.env
+.DS_Store
+data/sanctions/*.json
+data/sanctions/raw/
