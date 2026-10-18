@@ -38,6 +38,11 @@ type Store = {
   addCompare: (ids: string[]) => number;
   removeCompare: (id: string) => void;
   clearCompare: () => void;
+  /** Replaces the whole compare set, e.g. from the supplier picker. */
+  setCompareSet: (ids: string[]) => void;
+  /** True while the compare set was restored from a previous session and not yet confirmed or changed. */
+  compareRestored: boolean;
+  confirmCompare: () => void;
   drawerId: string | null;
   openDrawer: (id: string | null) => void;
   chat: ChatState;
@@ -80,7 +85,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [weights, setWeightsState] = useState<Record<string, number>>({});
   const [presetKey, setPresetKey] = useState("official");
   const [custom, setCustom] = useState<CustomIndex | null>(null);
-  const [compare, setCompare] = useState<string[]>([]);
+  const [compare, setCompareState] = useState<string[]>([]);
+  const [compareRestored, setCompareRestored] = useState(false);
+  // Any change by the user counts as confirming the set.
+  const setCompare = useCallback((next: string[] | ((cur: string[]) => string[])) => {
+    setCompareState(next);
+    setCompareRestored(false);
+  }, []);
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [chat, setChat] = useState<ChatState>({ open: false, contextIds: [], seed: null, nonce: 0 });
   const [filters, setFilters] = useState<Filters | null>(null);
@@ -100,9 +111,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const refreshMeta = useCallback(async () => {
     const m = await api.get<DatasetMeta | { loaded: false }>("/api/dataset");
-    setMeta(m);
     if (m.loaded) {
-      const d = await api.get<SuppliersData>("/api/suppliers");
+      // Set meta together with the restored compare set, so pages never mount with an empty set that then fills in.
+      const d = await api.get<SuppliersData>("/api/suppliers").catch((e) => {
+        setMeta(m);
+        throw e;
+      });
+      setMeta(m);
       setData(d);
       const key = `sc:${me?.user}:${m.uploaded_at}`;
       const saved = loadLocal<{ weights?: Record<string, number>; presetKey?: string; compare?: string[] }>(key, {});
@@ -112,9 +127,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setCustom(null);
       setFilters(null);
       const ids = new Set(d.ids);
-      setCompare((saved.compare ?? []).filter((id) => ids.has(id)));
+      const restored = (saved.compare ?? []).filter((id) => ids.has(id));
+      setCompareState(restored);
+      setCompareRestored(restored.length > 0);
       hydratedKey.current = key;
     } else {
+      setMeta(m);
       hydratedKey.current = null;
       setData(null);
       setCompare([]);
@@ -217,6 +235,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addCompare,
     removeCompare: (id) => setCompare((c) => c.filter((x) => x !== id)),
     clearCompare: () => setCompare([]),
+    setCompareSet: (ids) => setCompare(ids.slice(0, MAX_COMPARE)),
+    compareRestored,
+    confirmCompare: () => setCompareRestored(false),
     drawerId,
     openDrawer: setDrawerId,
     chat,

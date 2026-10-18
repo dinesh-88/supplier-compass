@@ -15,14 +15,15 @@ const MAX_RADAR = 5;
 type SortCol = { key: string; desc: boolean };
 
 export default function Compare() {
-  const { compare, removeCompare, clearCompare, weights, isOfficial, openChat, openDrawer, presetKey, meta } = useStore();
+  const { compare, compareRestored, removeCompare, clearCompare, weights, isOfficial, openChat, openDrawer, presetKey, meta } = useStore();
   const nav = useNavigate();
   const [data, setData] = useState<CompareData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [sort, setSort] = useState<SortCol>({ key: "total_risk_index", desc: false });
   const [radar, setRadar] = useState<string[]>([]);
-  // Comparing needs suppliers: prompt for them as soon as the tab opens with none selected.
-  const [picking, setPicking] = useState(() => !compare.length);
+  // Comparing needs suppliers: prompt for them as soon as the tab opens with none selected,
+  // or to confirm a set restored from an earlier session.
+  const [picking, setPicking] = useState(() => !compare.length || compareRestored);
   const presetName = meta && meta.loaded ? weightsLabel(presetKey, meta.presets) : "";
 
   useEffect(() => {

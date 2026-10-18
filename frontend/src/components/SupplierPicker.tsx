@@ -3,31 +3,44 @@ import { useNavigate } from "react-router-dom";
 import { MAX_COMPARE, useStore } from "../lib/store";
 import { Modal } from "./ui";
 
-/** Prompts for suppliers and adds the picks to the compare set, which the Compare, Analyses and Memo pages run on. */
+/**
+ * Edits the compare set, which the Compare, Analyses and Memo pages run on. When the set was restored from an
+ * earlier session it opens pre-ticked so the user confirms it rather than running on a stale selection.
+ */
 export default function SupplierPicker({ title, min = 1, onClose }: { title: string; min?: number; onClose: () => void }) {
-  const { data, compare, addCompare } = useStore();
+  const { data, compare, setCompareSet, compareRestored, confirmCompare } = useStore();
   const nav = useNavigate();
   const [q, setQ] = useState("");
-  const [picked, setPicked] = useState<string[]>([]);
-  const room = MAX_COMPARE - compare.length;
+  const [sel, setSel] = useState<string[]>(compare);
+  const restored = compareRestored && compare.length > 0;
+
+  const nameOf = useMemo(() => new Map(data?.ids.map((id, i) => [id, i]) ?? []), [data]);
   const rows = useMemo(() => {
     if (!data) return [];
     const t = q.trim().toLowerCase();
-    const out: number[] = [];
-    for (let i = 0; i < data.ids.length && out.length < 200; i++) {
-      if (compare.includes(data.ids[i])) continue;
-      if (!t || data.ids[i].toLowerCase().includes(t) || (data.names[i] ?? "").toLowerCase().includes(t)) out.push(i);
-    }
-    return out;
-  }, [q, data, compare]);
+    const match = (i: number) => !t || data.ids[i].toLowerCase().includes(t) || (data.names[i] ?? "").toLowerCase().includes(t);
+    // Initially selected suppliers first, so they stay in place while ticking and unticking.
+    const first = compare.map((id) => nameOf.get(id)).filter((i): i is number => i !== undefined && match(i));
+    const rest: number[] = [];
+    for (let i = 0; i < data.ids.length && rest.length < 200; i++) if (!compare.includes(data.ids[i]) && match(i)) rest.push(i);
+    return [...first, ...rest];
+  }, [q, data, compare, nameOf]);
+
   const toggle = (id: string) =>
-    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < room ? [...cur, id] : cur));
-  const total = compare.length + picked.length;
+    setSel((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < MAX_COMPARE ? [...cur, id] : cur));
+  const close = () => {
+    // Dismissing the prompt keeps the restored set as it is; don't ask again on the next tab.
+    if (restored) confirmCompare();
+    onClose();
+  };
 
   return (
-    <Modal title={title} onClose={onClose} width={560}>
+    <Modal title={restored ? "Confirm suppliers" : title} onClose={close} width={560}>
       <p className="mb-2 text-xs text-ink-3">
-        Suppliers go into the compare set. Pick at least {min} supplier{min === 1 ? "" : "s"} (up to {MAX_COMPARE} in total).
+        {restored
+          ? `These ${compare.length} suppliers are from your last session. Keep them, untick any you don't want, or add others.`
+          : "Suppliers go into the compare set."}{" "}
+        Pick at least {min} (up to {MAX_COMPARE}).
       </p>
       <input className="input mb-2 w-full" placeholder="Search by ID or name" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
       {!data ? (
@@ -36,11 +49,11 @@ export default function SupplierPicker({ title, min = 1, onClose }: { title: str
         <ul className="max-h-[45vh] divide-y divide-line overflow-auto rounded-md border border-line" data-testid="supplier-picker">
           {rows.map((i) => {
             const id = data.ids[i];
-            const on = picked.includes(id);
+            const on = sel.includes(id);
             return (
               <li key={id}>
                 <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-canvas">
-                  <input type="checkbox" className="accent-[var(--color-accent)]" checked={on} disabled={!on && picked.length >= room} onChange={() => toggle(id)} />
+                  <input type="checkbox" className="accent-[var(--color-accent)]" checked={on} disabled={!on && sel.length >= MAX_COMPARE} onChange={() => toggle(id)} />
                   <span className="font-medium">{id}</span>
                   <span className="truncate text-ink-2">{data.names[i]}</span>
                   <span className="num ml-auto text-xs text-ink-3">{data.index[i]?.toFixed(2)}</span>
@@ -53,18 +66,19 @@ export default function SupplierPicker({ title, min = 1, onClose }: { title: str
       )}
       <div className="mt-3 flex items-center gap-2">
         <button className="btn-ghost text-xs" onClick={() => nav("/explore")}>Browse in Explore instead</button>
-        <span className="ml-auto text-xs text-ink-3">{total} selected</span>
-        <button className="btn" onClick={onClose}>Cancel</button>
+        <span className="ml-auto text-xs text-ink-3">{sel.length} selected</span>
+        {sel.length > 0 && <button className="btn-ghost text-xs" onClick={() => setSel([])}>Clear</button>}
+        <button className="btn" onClick={close}>Cancel</button>
         <button
           className="btn-primary"
-          disabled={!picked.length || total < min}
+          disabled={sel.length < min}
           onClick={() => {
-            addCompare(picked);
+            setCompareSet(sel);
             onClose();
           }}
           data-testid="confirm-suppliers"
         >
-          Use selected
+          {restored ? "Confirm" : "Use selected"}
         </button>
       </div>
     </Modal>

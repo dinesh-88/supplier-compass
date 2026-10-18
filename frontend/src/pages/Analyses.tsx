@@ -37,7 +37,7 @@ type PluginInfo = {
 type RunResult = { plugin_name: string; title: string; summary: string; assumptions: string[]; blocks: Block[]; ids: string[]; params: Record<string, unknown> };
 
 export default function Analyses() {
-  const { compare, openChat } = useStore();
+  const { compare, compareRestored, openChat } = useStore();
   const [search, setSearch] = useSearchParams();
   const [list, setList] = useState<PluginInfo[] | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
@@ -91,9 +91,10 @@ export default function Analyses() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plugin, urlIds, urlParams]);
 
-  // Analyses need suppliers: prompt for them as soon as the tab opens with none selected.
+  // Analyses need suppliers: prompt for them as soon as the tab opens with none selected, or to confirm a set
+  // restored from an earlier session. Suppliers passed in the URL were chosen just now, so they need no prompt.
   useEffect(() => {
-    if (list && !ids.length) setPicking(true);
+    if (list && (!ids.length || (compareRestored && !urlIds))) setPicking(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list]);
 

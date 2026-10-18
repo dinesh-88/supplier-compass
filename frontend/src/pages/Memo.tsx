@@ -10,12 +10,13 @@ type ReportSummary = { id: string; company: string; research_date: string; overa
 type MemoResult = { markdown: string; prose: { source: string; removed: string[] } };
 
 export default function Memo() {
-  const { compare, weights, isOfficial, presetKey, meta, notify } = useStore();
+  const { compare, compareRestored, weights, isOfficial, presetKey, meta, notify } = useStore();
   const presets = meta && meta.loaded ? meta.presets : [];
   const presetName = isOfficial ? "Official index" : weightsLabel(presetKey, presets);
   const presetWhy = presets.find((p) => p.key === presetKey)?.why ?? "";
-  // The memo needs a shortlist: prompt for one as soon as the tab opens with none selected.
-  const [picking, setPicking] = useState(() => !compare.length);
+  // The memo needs a shortlist: prompt for one as soon as the tab opens with none selected,
+  // or to confirm a set restored from an earlier session.
+  const [picking, setPicking] = useState(() => !compare.length || compareRestored);
   const [title, setTitle] = useState("Supplier shortlist memo");
   const [rationale, setRationale] = useState(presetWhy);
   const [reports, setReports] = useState<ReportSummary[]>([]);
