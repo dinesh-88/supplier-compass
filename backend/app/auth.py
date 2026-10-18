@@ -49,7 +49,7 @@ class UserStore:
 
 
 users = UserStore(settings.app_users)
-_serializer = URLSafeTimedSerializer(settings.secret_key, salt="supplier-compass-session")
+_serializer = URLSafeTimedSerializer(settings.session_secret, salt="supplier-compass-session")
 
 
 def make_session(user: str) -> str:

@@ -11,4 +11,6 @@ frontend/test-results
 frontend/playwright-report
 data/sanctions
 .env
-docs/screenshots
+deploy.env
+scripts/shoot.mjs
+docs

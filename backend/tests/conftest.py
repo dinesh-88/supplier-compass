@@ -10,7 +10,7 @@ os.environ.update(
     TAVILY_API_KEY="",
     STATIC_DIR=str(Path(_TMP) / "no-static"),
     SANCTIONS_DIR=str(Path(__file__).parent / "fixtures" / "sanctions"),
-    SECRET_KEY="test-secret",
+    SESSION_SECRET="test-session-secret-0123456789",
 )
 
 import pytest  # noqa: E402

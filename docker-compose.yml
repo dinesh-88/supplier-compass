@@ -3,8 +3,10 @@ services:
     build: .
     image: supplier-compass:latest
     ports:
-      - "${PORT:-8000}:8000"
+      - "${PORT:-8080}:8080"
     env_file: .env
+    environment:
+      DATA_DIR: /data
     volumes:
       - app-data:/data
     restart: unless-stopped

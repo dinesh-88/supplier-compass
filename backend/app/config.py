@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,7 +15,7 @@ def _flag(name: str, default: str = "0") -> bool:
 
 @dataclass
 class Settings:
-    data_dir: Path = field(default_factory=lambda: Path(os.environ.get("DATA_DIR", ROOT / "var")))
+    data_dir: Path = field(default_factory=lambda: Path(os.environ.get("DATA_DIR") or "/tmp/data"))
     sample_dir: Path = field(default_factory=lambda: Path(os.environ.get("SAMPLE_DIR", ROOT / "data" / "sample")))
     sanctions_dir: Path = field(
         default_factory=lambda: Path(os.environ.get("SANCTIONS_DIR", ROOT / "data" / "sanctions"))
@@ -24,8 +23,8 @@ class Settings:
     static_dir: Path = field(
         default_factory=lambda: Path(os.environ.get("STATIC_DIR", ROOT / "frontend" / "dist"))
     )
-    app_users: str = field(default_factory=lambda: os.environ.get("APP_USERS", "jury:jury"))
-    secret_key: str = field(default_factory=lambda: os.environ.get("SECRET_KEY") or secrets.token_hex(32))
+    app_users: str = field(default_factory=lambda: os.environ.get("APP_USERS", ""))
+    session_secret: str = field(default_factory=lambda: os.environ.get("SESSION_SECRET", "").strip())
     cookie_secure: bool = field(default_factory=lambda: _flag("COOKIE_SECURE"))
     session_max_age: int = 60 * 60 * 12
 
@@ -52,4 +51,24 @@ class Settings:
         return self.llm_fast_model or self.llm_model
 
 
+    def problems(self) -> list[str]:
+        """Settings the app cannot start without. Names only, never values."""
+        out = []
+        if len(self.session_secret) < 16:
+            out.append("SESSION_SECRET is missing or shorter than 16 characters "
+                       "(generate one with: python -c \"import secrets; print(secrets.token_hex(32))\")")
+        if not self.app_users.strip():
+            out.append("APP_USERS is empty")
+        return out
+
+    def summary(self) -> str:
+        """One startup log line: which features are configured, without any secret values."""
+        users = [u.split(":", 1)[0].strip() for u in self.app_users.split(",") if u.strip()]
+        return (f"data_dir={self.data_dir} users={','.join(users)} llm={'on' if self.llm_api_key else 'off'} "
+                f"model={self.llm_model} search={'on' if self.tavily_api_key else 'off'} "
+                f"cookie_secure={self.cookie_secure}")
+
+
 settings = Settings()
+if _problems := settings.problems():
+    raise SystemExit("Supplier Compass cannot start: " + "; ".join(_problems))

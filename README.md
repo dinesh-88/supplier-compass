@@ -12,6 +12,7 @@ web carries a source link returned by a search tool.
 - [Run locally](#run-locally)
 - [Run with Docker](#run-with-docker)
 - [Deploy on a Nebius VM](#deploy-on-a-nebius-vm)
+- [Deploy on Nebius](#deploy-on-nebius)
 - [Jury logins](#jury-logins)
 - [How the brief is met](#how-the-brief-is-met)
 - [Two-minute demo script](#two-minute-demo-script)
@@ -30,7 +31,7 @@ python3 -m venv .venv
 
 cd frontend && npm ci && npm run build && cd ..        # builds frontend/dist, served by the backend
 
-cp .env.example .env                                   # then edit: APP_USERS, SECRET_KEY, keys
+cp .env.example .env                                   # then edit: APP_USERS, SESSION_SECRET, keys
 cd backend
 set -a; . ../.env; set +a
 ../.venv/bin/uvicorn app.main:app --port 8000
@@ -48,21 +49,22 @@ supplier drawer need no keys.
 ## Run with Docker
 
 ```bash
-cp .env.example .env      # set APP_USERS, SECRET_KEY, LLM_API_KEY, TAVILY_API_KEY
+cp .env.example .env      # set APP_USERS, SESSION_SECRET, LLM_API_KEY, TAVILY_API_KEY
 docker compose up -d --build
 ```
 
-One image: a Node stage builds the frontend, then a Python 3.12 slim image serves it with the API on port 8000.
+One linux/amd64 image (about 170 MB compressed): a Node stage builds the frontend, then a Python 3.12 slim image
+serves it with the API on port 8080 as a non-root user. `GET /health` returns 200 without a login.
 The sanctions lists are downloaded **at build time** and cached in the image. If the download fails, the build
 still succeeds and the app reports the lists as unavailable. User datasets and research reports live in the
-`app-data` volume (`/data`). Set `PORT` in `.env` to publish on a port other than 8000.
+`app-data` volume (`/data`). Set `PORT` in `.env` to publish on a port other than 8080.
 
 ## Deploy on a Nebius VM
 
 The app is CPU-only and small: one container, about 165 MB resident memory with the sample loaded (measured locally).
 
 1. **Create the VM** in the Nebius AI Cloud console: Ubuntu 22.04 or 24.04, a CPU-only platform with 2–4 vCPUs and 4–8 GB RAM, a 30 GB boot disk, a public IPv4 address, and your SSH key.
-2. **Open ports** 22, 80 and 443 in the VM's security group (or only 8000 for a quick test).
+2. **Open ports** 22, 80 and 443 in the VM's security group (or only 8080 for a quick test).
 3. **Install Docker** on the VM:
    ```bash
    ssh <user>@<vm-ip>
@@ -72,20 +74,20 @@ The app is CPU-only and small: one container, about 165 MB resident memory with 
 4. **Deploy**:
    ```bash
    git clone <this repo> supplier-compass && cd supplier-compass
-   cp .env.example .env && nano .env      # APP_USERS, SECRET_KEY, LLM_API_KEY (Nebius Token Factory), TAVILY_API_KEY
+   cp .env.example .env && nano .env      # APP_USERS, SESSION_SECRET, LLM_API_KEY (Nebius Token Factory), TAVILY_API_KEY
    docker compose up -d --build
    ```
-   The app is now at `http://<vm-ip>:8000`.
+   The app is now at `http://<vm-ip>:8080`.
 5. **HTTPS (recommended for the jury).** Point a DNS name at the VM, set `COOKIE_SECURE=1` in `.env`, and put
    Caddy in front ([install guide](https://caddyserver.com/docs/install)). It fetches certificates automatically: 
    ```bash
    # after installing Caddy:
    echo 'compass.example.com {
-     reverse_proxy 127.0.0.1:8000
+     reverse_proxy 127.0.0.1:8080
    }' | sudo tee /etc/caddy/Caddyfile && sudo systemctl reload caddy
    docker compose up -d
    ```
-   Then close port 8000 in the security group.
+   Then close port 8080 in the security group.
 6. **Update** with `git pull && docker compose up -d --build`. Data persists in the `app-data` volume.
 
 Create the LLM key in Nebius Token Factory. The default endpoint is
@@ -93,12 +95,73 @@ Create the LLM key in Nebius Token Factory. The default endpoint is
 Any OpenAI-compatible endpoint and tool-calling model works via `LLM_BASE_URL` and `LLM_MODEL`.
 `LLM_FAST_MODEL` (optional) is used for the research agent's planning, triage and summaries.
 
+## Deploy on Nebius
+
+`scripts/deploy_nebius.sh` builds the image, pushes it to Nebius Container Registry and runs it as a public
+[Nebius serverless endpoint](https://docs.nebius.com/serverless) on a CPU platform (`cpu-d3`, `4vcpu-16gb`).
+
+**Prerequisites**
+
+- The [Nebius CLI](https://docs.nebius.com/cli/install), logged in (`nebius iam whoami` works) with a profile
+  whose `parent-id` is your project (or set `PROJECT_ID` in `deploy.env`).
+- `jq`, `curl`, `git`, and Docker with `buildx` (on Apple Silicon the image is cross-built for linux/amd64; the
+  frontend stage runs natively).
+
+**Deploy with one command**
+
+```bash
+cp deploy.env.example deploy.env    # git-ignored: REGION_ID, names, APP_USERS, SESSION_SECRET, LLM_API_KEY, TAVILY_API_KEY
+scripts/deploy_nebius.sh
+```
+
+The script:
+
+1. checks `deploy.env` (it refuses an empty `SESSION_SECRET` or a `change-me` password);
+2. creates the registry `REGISTRY_NAME` if needed and runs `nebius registry configure-helper`;
+3. builds and pushes `cr.$REGION_ID.nebius.cloud/<registry id>/supplier-compass:<git short sha>` (`-dirty` is
+   appended when there are uncommitted changes);
+4. runs `nebius ai endpoint create` with `--public --container-port 8080 --disk-size 20Gi`, the project's
+   default subnet and one `--env` per app variable, plus `COOKIE_SECURE=1`. There is no `--auth token`: browsers
+   cannot send it, and the app's own login protects every `/api` route;
+5. waits until the endpoint is `RUNNING`, prints its `https://` URL, then checks that `/health` returns 200 and
+   that the first `APP_USERS` user can log in. If either fails, it prints the last log lines and exits non-zero.
+
+**Redeploying.** The Nebius CLI has no `endpoint update` command, so a new image means deleting and re-creating
+the endpoint, and its URL may change. If the endpoint already exists, the script shows its state and URL and
+asks you to type the endpoint name before it deletes anything. Without a terminal it stops. The new image is
+built and pushed before the old endpoint is deleted.
+
+**Storage.** The container's disk is treated as temporary: `DATA_DIR=/tmp/data` may be wiped on any restart.
+The challenge sample is bundled in the image, so **Load the challenge sample** always works; uploaded datasets
+and research reports may be lost.
+
+**Logs**
+
+```bash
+nebius ai endpoint list                                   # find the endpoint ID
+nebius ai endpoint logs <endpoint-id> --follow            # stream the logs
+nebius ai endpoint logs <endpoint-id> --since 2h --tail 200
+```
+
+At startup the app logs one line with the data directory, user names and which features are on. Passwords,
+the session secret and API keys are never logged. The secrets are visible to anyone with access to the endpoint's
+spec in the project; for stricter handling, store them in MysteryBox and switch the script to `--env-secret`.
+
+**Test the jury login from a private window**
+
+1. Open a private (incognito) window, so no cookie from an earlier session is reused.
+2. Go to the URL the script printed. You should see the sign-in page. `https://<url>/api/me` should return
+   `{"detail":"Not logged in"}`.
+3. Sign in with a name and password from `APP_USERS`. A wrong password shows "Wrong user name or password".
+4. Click **Load the challenge sample** and open Explore. Each juror name has its own workspace.
+5. Close the window and open a new private one: you should be asked to sign in again.
+
 ## Jury logins
 
 Users come from one environment variable: `APP_USERS="jury:<password>,alice:<password2>"`. Passwords are
 hashed (PBKDF2-SHA256, random salt) at startup and the plain text is not kept. The session is a signed,
-HTTP-only, SameSite=Lax cookie (12 hours), signed with `SECRET_KEY`. Set `SECRET_KEY` explicitly so sessions
-survive restarts. Every `/api` route except `/api/login` requires a session. Each user has their own dataset
+HTTP-only, SameSite=Lax cookie (12 hours), signed with `SESSION_SECRET`; the app refuses to start without it (or
+without `APP_USERS`), so sessions always survive restarts. Every `/api` route except `/api/login` requires a session. Each user has their own dataset
 and research reports under `DATA_DIR/<user>/`, so two users never see each other's data. Jurors who share
 one login share its dataset; give each juror their own name if they should not.
 
@@ -106,8 +169,8 @@ one login share its dataset; give each juror their own name if they should not.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `APP_USERS` | `jury:jury` | `name:password` pairs, comma-separated |
-| `SECRET_KEY` | random at startup | signs session cookies |
+| `APP_USERS` | **required** | `name:password` pairs, comma-separated |
+| `SESSION_SECRET` | **required** | signs session cookies (16+ characters) |
 | `COOKIE_SECURE` | `0` | `1` behind HTTPS |
 | `LLM_BASE_URL` | Nebius Token Factory | OpenAI-compatible endpoint |
 | `LLM_API_KEY` | (empty) | required for chat, research and memo prose |
@@ -115,7 +178,7 @@ one login share its dataset; give each juror their own name if they should not.
 | `LLM_FAST_MODEL` | `LLM_MODEL` | research planning, triage and summary |
 | `LLM_REASONING_TOKENS` | `3000` | extra completion tokens for models that reason before answering (Nemotron 3) |
 | `TAVILY_API_KEY` | (empty) | required for research (web search and extraction) |
-| `DATA_DIR` | `./var` (Docker: `/data`) | per-user DuckDB files and reports |
+| `DATA_DIR` | `/tmp/data` (compose: `/data` volume) | per-user DuckDB files and reports; may be wiped, the bundled sample always loads |
 
 ## How the brief is met
 
@@ -280,7 +343,7 @@ text label. Tabular numerals throughout, a 15 px base font, and layouts checked 
 ## Tests
 
 ```bash
-cd backend && ../.venv/bin/python -m pytest          # 89 tests
+cd backend && ../.venv/bin/python -m pytest          # 93 tests
 cd frontend && npx tsc -b                            # type-check
 cd frontend && npm run build && npx playwright test  # smoke test (starts the backend and a test-only fake LLM)
 ```

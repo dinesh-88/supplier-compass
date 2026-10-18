@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import tempfile
 from pathlib import Path
@@ -23,6 +24,9 @@ app = FastAPI(title="Supplier Compass", docs_url=None, redoc_url=None, openapi_u
 app.add_middleware(GZipMiddleware, minimum_size=2048)
 
 PUBLIC_API = {"/api/login"}
+log = logging.getLogger("uvicorn.error")
+settings.data_dir.mkdir(parents=True, exist_ok=True)
+log.info("Supplier Compass: %s", settings.summary())
 
 
 @app.middleware("http")
@@ -295,8 +299,10 @@ def engine_for(user: str, ds: Dataset):
 # --------------------------------------------------------------------------- static frontend
 
 
-@app.get("/healthz")
-def healthz():
+@app.get("/health")
+@app.get("/healthz", include_in_schema=False)
+def health():
+    """Liveness for the platform: no login, no secrets, no dataset needed."""
     return {"ok": True}
 
 
