@@ -156,7 +156,7 @@ def field_comparison(ds: Dataset, ids: list[str], fields: list[str]) -> dict:
             combined.sort(key=lambda x: x["combined"])
             entry["combined"] = {
                 "method": "weighted by the index weights " + ":".join(str(w[c]) for c in score_only)
-                + " (" + ", ".join(score_only) + ")",
+                + " (" + ", ".join(f"`{c}`" for c in score_only) + ")",
                 "values": combined,
                 "lowest": combined[0]["supplierID"],
             }

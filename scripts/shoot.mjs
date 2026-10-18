@@ -5,7 +5,7 @@ const out = process.argv[2] || ".";
 const steps = process.argv.slice(3);
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
-page.on("pageerror", (e) => console.log("PAGEERROR", e.message));
+page.on("pageerror", (e) => console.log("PAGEERROR", e.message, (e.stack||"").split("\n").slice(0,6).join(" | ")));
 page.on("console", (m) => m.type() === "error" && console.log("CONSOLE", m.text()));
 await page.goto(BASE + "/");
 await page.fill('input[name="username"]', process.env.USER_NAME || "jury");

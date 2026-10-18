@@ -91,8 +91,8 @@ function ExploreInner({ data, b, def, filters, setFilters }: { data: SuppliersDa
 
         <div className="card flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-3 border-b border-line px-3 py-2 text-sm">
-            <span className="font-medium">Ranked suppliers</span>
-            <label className="flex items-center gap-1.5 text-ink-2">
+            <span className="font-medium whitespace-nowrap">Ranked suppliers</span>
+            <label className="flex items-center gap-1.5 whitespace-nowrap text-ink-2">
               Sort by
               <select className="input py-1" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort by">
                 <option value="official">Official index</option>
@@ -280,8 +280,8 @@ function Scatter({ data, matches, compare, onPick }: { data: SuppliersData; matc
     }
     const allMatch = other.length === 0;
     return {
-      grid: { left: 44, right: 14, top: 30, bottom: 34 },
-      legend: { top: 2, right: 6, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11, color: "#4b5259" } },
+      grid: { left: 50, right: 14, top: 30, bottom: 34 },
+      legend: { top: 2, right: 6, left: 50, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11, color: "#4b5259" } },
       tooltip: {
         trigger: "item",
         formatter: (p: { value: number[] }) => {
@@ -290,7 +290,7 @@ function Scatter({ data, matches, compare, onPick }: { data: SuppliersData; matc
         },
       },
       xAxis: { type: "log", name: "Spend (EUR, log)", nameLocation: "middle", nameGap: 22, ...AXIS, axisLabel: { ...AXIS.axisLabel, formatter: (v: number) => fmtEur(v) } },
-      yAxis: { type: "value", name: "Total Risk Index", min: 0, max: 100, nameGap: 8, ...AXIS },
+      yAxis: { type: "value", name: "Total Risk Index", nameLocation: "middle", nameGap: 32, min: 0, max: 100, ...AXIS },
       series: [
         { name: "Not matching", type: "scatter", data: other, symbolSize: 3, itemStyle: { color: "#cfd4d9" }, large: true, largeThreshold: 3000, silent: false },
         { name: allMatch ? "All suppliers" : "Matching filters", type: "scatter", data: hit, symbolSize: hit.length > 2000 ? 3 : 5, itemStyle: { color: ACCENT, opacity: hit.length > 2000 ? 0.55 : 0.85 }, large: hit.length > 3000 },
