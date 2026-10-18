@@ -1,5 +1,8 @@
-from app import chat as chatmod
 from app import llm
+
+from .fakes import IDS_RE, ScriptedChatLLM, use_llm
+
+TRIO = ["SUPP_00012", "SUPP_00450", "SUPP_00731"]
 
 
 def ask(client, q, context=None):
@@ -8,40 +11,80 @@ def ask(client, q, context=None):
     return r.json()
 
 
-def test_financial_risk_ambiguity_shows_both_columns(sample_client):
+def test_not_configured_is_an_explicit_error(sample_client):
+    r = ask(sample_client, "Why is SUPP_00018 high?")
+    assert r["error"] and "not configured" in r["answer"]
+    assert r["trace"] == []
+
+
+def test_financial_risk_ambiguity_reports_both_columns(sample_client, monkeypatch):
+    def answer(results, messages):
+        cmp = results[1]
+        term = cmp["multi_column_terms"][0]
+        lines = [f"{c}: best {b['supplierID']}" for c, b in term["best_per_column"].items()]
+        if term["columns_disagree"]:
+            lines.append("The columns disagree.")
+        lines.append(f"Combined lowest: {term['combined']['lowest']}")
+        return "\n".join(lines)
+
+    fake = ScriptedChatLLM([
+        [("define", {"term": "financial risk"}), ("compare", {"ids": TRIO, "fields": ["financial risk"]})],
+        answer,
+    ])
+    use_llm(monkeypatch, fake)
     r = ask(sample_client, "Which of SUPP_00012, SUPP_00450 and SUPP_00731 has the lowest financial risk?")
-    a = r["answer"]
-    assert r["mock"] and a.startswith(llm.MOCK_LABEL)
-    assert "Financial Health" in a and "Credit Rating" in a
-    assert "disagree" in a
-    assert "SUPP_00731 is best on Financial Health but worst on Credit Rating" in a
-    assert "Lowest: **SUPP_00012**" in a
-    assert "10:6" in a
-    tools = [t["tool"] for t in r["trace"]]
-    assert "compare" in tools and "define" in tools
+    # The system prompt tells the model to report each column and say when they disagree.
+    system = fake.requests[0][0]["content"]
+    assert "report each column separately" in system and "disagree" in system
+    define, compare = r["trace"][0]["result"], r["trace"][1]["result"]
+    assert define["ambiguous"] and define["columns"] == ["financial_health_score", "credit_rating_score"]
+    term = compare["multi_column_terms"][0]
+    assert term["columns_disagree"]
+    assert term["best_per_column"]["financial_health_score"]["supplierID"] == "SUPP_00731"
+    assert term["worst_per_column"]["credit_rating_score"]["supplierID"] == "SUPP_00731"
+    assert term["combined"]["lowest"] == "SUPP_00012"
+    assert [v["combined"] for v in term["combined"]["values"]] == [55.1, 61.6, 62.4]
+    assert "10:6" in term["combined"]["method"]
+    assert "financial_health_score: best SUPP_00731" in r["answer"]
+    assert "credit_rating_score: best SUPP_00012" in r["answer"]
+    assert "disagree" in r["answer"] and "Combined lowest: SUPP_00012" in r["answer"]
 
 
-def test_why_is_supp_00018_high(sample_client):
+def test_why_is_supp_00018_high(sample_client, monkeypatch):
+    fake = ScriptedChatLLM([
+        [("explain_index", {"id": "SUPP_00018"})],
+        lambda res, _: ", ".join(f"{d['label']} {d['points_above_average']:+.1f}" for d in res[0]["top_drivers"][:3]),
+    ])
+    use_llm(monkeypatch, fake)
     r = ask(sample_client, "Why is the Total Risk Index of SUPP_00018 so high?")
-    a = r["answer"]
-    assert "**80**" in a and "Critical" in a
-    assert "Operational Resilience" in a and "+4.5" in a
-    assert "Compliance Risk" in a and "+3.8" in a
-    assert "Governance Risk" in a and "+2.4" in a
-    assert r["trace"][0]["tool"] == "explain_index"
+    e = r["trace"][0]["result"]
+    assert e["total_risk_index"] == 80 and e["level"] == "Critical" and int(e["percentile"]) == 98
+    assert r["answer"] == "Operational Resilience +4.5, Compliance Risk +3.8, Governance Risk +2.4"
 
 
-def test_compare_these_uses_context_and_offers_ui_action(sample_client):
-    ids = ["SUPP_00012", "SUPP_00450", "SUPP_00731"]
-    r = ask(sample_client, "compare these", context=ids)
-    assert r["actions"] == [{"type": "add_to_compare", "ids": ids}]
+def test_compare_these_uses_context_and_offers_ui_action(sample_client, monkeypatch):
+    def turn(messages, tools=None, **kw):
+        if any(m.get("role") == "tool" for m in messages):
+            return {"content": "Added.", "tool_calls": []}
+        ctx = IDS_RE.findall(messages[0]["content"].split("selection:")[1])
+        return {"content": "", "tool_calls": [{"id": "1", "name": "add_to_compare", "arguments": {"ids": ctx}},
+                                              {"id": "2", "name": "make_chart", "arguments": {"type": "radar", "ids": ctx}}]}
+
+    use_llm(monkeypatch, turn)
+    r = ask(sample_client, "compare these", context=TRIO)
+    assert r["actions"] == [{"type": "add_to_compare", "ids": TRIO}]
     assert r["charts"] and r["charts"][0]["type"] == "radar"
 
 
-def test_sql_is_shown_in_trace(sample_client):
+def test_sql_is_shown_in_trace(sample_client, monkeypatch):
+    fake = ScriptedChatLLM([
+        [("query_suppliers", {"sql": "SELECT count(*) AS n FROM suppliers WHERE total_risk_index >= 75"})],
+        lambda res, _: f"There are {res[0]['rows'][0][0]} Critical suppliers.",
+    ])
+    use_llm(monkeypatch, fake)
     r = ask(sample_client, "How many Critical suppliers are there?")
-    assert "**384**" in r["answer"]
-    assert r["trace"][0]["sql"].startswith("SELECT")
+    assert r["answer"] == "There are 384 Critical suppliers."
+    assert r["trace"][0]["sql"].startswith("SELECT") and r["trace"][0]["sql"].endswith("LIMIT 200")
 
 
 def test_chart_types_are_restricted(ds):
@@ -58,8 +101,8 @@ def test_chart_types_are_restricted(ds):
     assert tb.charts[0]["option"]["series"][0]["type"] == "heatmap"
 
 
-def test_tool_loop_with_scripted_llm(monkeypatch, ds):
-    """The real loop: model calls a tool, gets the result, then answers."""
+def test_rejected_sql_is_returned_to_the_model(monkeypatch, ds):
+    from app import chat as chatmod
     from app.sqlguard import QueryEngine
 
     calls = []
@@ -76,8 +119,7 @@ def test_tool_loop_with_scripted_llm(monkeypatch, ds):
         assert '"rows": [[384]]' in messages[-1]["content"]
         return {"content": "There are 384 Critical suppliers.", "tool_calls": []}
 
-    monkeypatch.setattr(llm, "is_mock", lambda: False)
-    monkeypatch.setattr(llm, "chat", fake_chat)
+    use_llm(monkeypatch, fake_chat)
     r = chatmod.run_chat(ds, QueryEngine(str(ds.db_path)), [{"role": "user", "content": "How many critical?"}], [])
     assert r["answer"] == "There are 384 Critical suppliers."
     assert r["trace"][0]["error"].startswith("Exactly one statement")
@@ -85,20 +127,16 @@ def test_tool_loop_with_scripted_llm(monkeypatch, ds):
 
 
 def test_numbers_without_tools_are_challenged(monkeypatch, ds):
+    from app import chat as chatmod
     from app.sqlguard import QueryEngine
 
-    replies = iter([
-        {"content": "About 400 suppliers are critical.", "tool_calls": []},
-        {"content": "About 400 suppliers are critical.", "tool_calls": []},
-    ])
     seen = []
 
     def fake_chat(messages, tools=None, **kw):
         seen.append(messages[-1]["content"])
-        return next(replies)
+        return {"content": "About 400 suppliers are critical.", "tool_calls": []}
 
-    monkeypatch.setattr(llm, "is_mock", lambda: False)
-    monkeypatch.setattr(llm, "chat", fake_chat)
+    use_llm(monkeypatch, fake_chat)
     r = chatmod.run_chat(ds, QueryEngine(str(ds.db_path)), [{"role": "user", "content": "How many critical?"}], [])
     assert "Do not answer from memory" in seen[1]
     assert "not verified" in r["answer"]
@@ -111,7 +149,7 @@ def test_inline_toolcall_format_is_parsed(monkeypatch):
         def json(self):
             return {"choices": [{"message": {"content": '<TOOLCALL>[{"name": "define", "arguments": {"term": "credit"}}]</TOOLCALL>'}}]}
 
-    monkeypatch.setattr(llm, "is_mock", lambda: False)
+    use_llm(monkeypatch)
     monkeypatch.setattr(llm.httpx, "post", lambda *a, **k: Resp())
     out = llm.chat([{"role": "user", "content": "x"}], tools=[])
     assert out["tool_calls"][0]["name"] == "define"

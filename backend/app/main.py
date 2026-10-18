@@ -70,7 +70,8 @@ def logout():
 def me(user: str = Depends(current_user)):
     from . import llm, search
 
-    return {"user": user, "mock_llm": llm.is_mock(), "mock_search": search.is_mock(), "model": llm.model_name()}
+    return {"user": user, "llm_configured": llm.configured(), "search_configured": search.configured(),
+            "model": llm.model_name()}
 
 
 # --------------------------------------------------------------------------- dataset

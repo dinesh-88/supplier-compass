@@ -37,10 +37,10 @@ set -a; . ../.env; set +a
 
 Open <http://localhost:8000>, sign in, and click **Load the challenge sample**.
 
-**Offline mode.** `MOCK_LLM=1` and `MOCK_SEARCH=1` give canned responses that are always labelled
-("Mock LLM" and "Mock search" badges in the header, a `[Mock LLM …]` prefix on answers, `[MOCK]` titles and the
-reserved `mock-search.invalid` domain on search results). Both switch on automatically when `LLM_API_KEY` or
-`TAVILY_API_KEY` is empty. The mock chat still calls the real tools, so its numbers are real.
+**Keys.** Chat and memo prose need `LLM_API_KEY`; company research needs `TAVILY_API_KEY` and `LLM_API_KEY`.
+Without them the header shows "LLM not configured" / "Search not configured", the chat answers with a
+not-configured error, and the memo falls back to prose generated from the data only. Explore, Compare and the
+supplier drawer need no keys.
 
 **Frontend dev server** (hot reload; proxies `/api` to :8000): `cd frontend && npm run dev`, then open :5173.
 
@@ -109,11 +109,10 @@ one login share its dataset; give each juror their own name if they should not.
 | `SECRET_KEY` | random at startup | signs session cookies |
 | `COOKIE_SECURE` | `0` | `1` behind HTTPS |
 | `LLM_BASE_URL` | Nebius Token Factory | OpenAI-compatible endpoint |
-| `LLM_API_KEY` | (empty → mock) | |
+| `LLM_API_KEY` | (empty) | required for chat, research and memo prose |
 | `LLM_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | chat and memo model (needs tool calling) |
 | `LLM_FAST_MODEL` | `LLM_MODEL` | research planning, triage and summary |
-| `TAVILY_API_KEY` | (empty → mock) | web search and extraction |
-| `MOCK_LLM`, `MOCK_SEARCH` | `0` | force offline mode |
+| `TAVILY_API_KEY` | (empty) | required for research (web search and extraction) |
 | `DATA_DIR` | `./var` (Docker: `/data`) | per-user DuckDB files and reports |
 
 ## How the brief is met
@@ -252,20 +251,20 @@ text label. Tabular numerals throughout, a 15 px base font, and layouts checked 
 ```bash
 cd backend && ../.venv/bin/python -m pytest          # 64 tests
 cd frontend && npx tsc -b                            # type-check
-cd frontend && npm run build && npx playwright test  # smoke test (starts the backend itself, mock mode)
+cd frontend && npm run build && npx playwright test  # smoke test (starts the backend and a test-only fake LLM)
 ```
 
 Backend tests cover: index reconstruction for every row, the exact weights and the "verified" status, rounding
 ties, level bands and the fallback, the approximate case; upload validation, size limit, replace confirmation,
 user isolation and the Markdown fallback; the SQL guard (INSERT/UPDATE/DELETE/DDL, multiple statements, other
 tables, table functions, file access, LIMIT); explain_index for SUPP_00018; the financial-risk ambiguity with
-the mock LLM; the tool loop with a scripted LLM (including a rejected query and the "no tools" challenge); the
+a scripted LLM; the tool loop with a scripted LLM (including a rejected query and the "no tools" challenge); the
 research agent against a faked Tavily HTTP API (plan, follow-up on a red flag, the 25-search budget, verification
 dropping unsourced and misquoted claims, single-source marking, sanctions possible-match); the memo number check
 and PDF export; and auth on every `/api` route.
 
 The Playwright smoke test logs in, loads the sample, filters to the exposure list, adds 3 suppliers to
-compare, opens Compare, asks a question (mock LLM) and checks the trace, then generates and downloads the memo.
+compare, opens Compare, asks a question (answered by a test-only fake LLM through the real tool loop) and checks the trace, then generates and downloads the memo.
 
 ## Design decisions
 
@@ -278,5 +277,5 @@ compare, opens Compare, asks a question (mock LLM) and checks the trace, then ge
 - **Presets multiply** the official weights of their categories (e.g. Safety × 2.5), then renormalise to 100%.
 - **The compare heatmap is an HTML grid**, not a canvas chart. That gives sortable headers, readable numbers in
   every cell and keyboard access. All other charts are ECharts.
-- **Mock modes switch on automatically** when a key is missing, so the app never fails because a key is absent,
-  and the header always shows it.
+- **No mock modes in the app.** Missing keys produce explicit "not configured" errors; the fakes used by the
+  tests (`backend/tests/fakes.py`, `frontend/e2e/fake_llm.py`) are test-only.

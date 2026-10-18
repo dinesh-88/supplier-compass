@@ -16,7 +16,6 @@ type Finding = {
   followup_of: string | null;
   single_source?: boolean;
   corroborated_by?: string[];
-  mock?: boolean;
 };
 type SanctionsMatch = { status: string; score: number; matched_name: string; list: string; entry_id: string; entry_name: string; type: string; programs: string; country: string; url: string };
 type Sanctions = { status: string; available: boolean; note: string; matches: SanctionsMatch[]; lists: { list: string; entries: number; downloaded_at: string; available: boolean }[] };
@@ -35,9 +34,8 @@ export type Report = {
   verification: { kept: number; dropped_unsourced: (Finding & { reason: string })[]; rejected_during_triage: { url: string; quote: string; reason: string }[]; single_source: string[] };
   searches_used: number;
   search_budget: number;
-  mock: { search: boolean; llm: boolean };
 };
-type ReportSummary = { id: string; company: string; country: string; research_date: string; overall_level: string; confidence: string; mock: { search: boolean } };
+type ReportSummary = { id: string; company: string; country: string; research_date: string; overall_level: string; confidence: string };
 
 type Step =
   | { kind: "plan"; plan: { angle: string; label: string; query: string; why: string }[] }
@@ -144,7 +142,6 @@ export default function Research() {
                   {r.company} <span className="text-xs text-ink-3">{r.research_date}</span>
                 </button>
                 <LevelChip size="xs" level={r.overall_level} />
-                {r.mock?.search && <Badge tone="warn">mock</Badge>}
                 <button
                   className="btn-ghost text-xs"
                   aria-label={`Delete report ${r.company}`}
@@ -265,12 +262,6 @@ export function ReportView({ report }: { report: Report }) {
             Research date {report.research_date} · {report.searches_used}/{report.search_budget} searches
           </span>
         </div>
-        {(report.mock.search || report.mock.llm) && (
-          <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-warn">
-            {report.mock.search && "Search results are canned mock data (MOCK_SEARCH). "}
-            {report.mock.llm && "Plan, triage and summary use offline rules, not the LLM (MOCK_LLM)."}
-          </p>
-        )}
         <h3 className="mt-3 text-sm font-semibold">Executive summary</h3>
         <p className="mt-1 text-sm leading-relaxed text-ink-2">{report.executive_summary}</p>
         <details className="mt-2 text-xs text-ink-3">

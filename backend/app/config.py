@@ -38,8 +38,6 @@ class Settings:
     )
     llm_fast_model: str = field(default_factory=lambda: os.environ.get("LLM_FAST_MODEL", ""))
     tavily_api_key: str = field(default_factory=lambda: os.environ.get("TAVILY_API_KEY", ""))
-    mock_llm: bool = field(default_factory=lambda: _flag("MOCK_LLM"))
-    mock_search: bool = field(default_factory=lambda: _flag("MOCK_SEARCH"))
 
     max_upload_bytes: int = 50 * 1024 * 1024
     load_timeout_s: float = 10.0

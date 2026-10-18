@@ -2,102 +2,19 @@ import json
 
 import pytest
 
-from app import llm, research, sanctions, search
+from app import research, sanctions
 from app.config import settings
 
-
-class FakeTavily:
-    """Stands in for api.tavily.com: /search returns canned results, /extract returns page text."""
-
-    PAGES = {
-        "https://news.example.com/acme-fined": (
-            "Acme Rail fined by regulator",
-            "Acme Rail Systems was fined EUR 4 million by the rail safety regulator in 2024 for falsified weld "
-            "inspection records. The company said it would appeal.",
-        ),
-        "https://court.example.org/acme-ruling": (
-            "Court upholds fine against Acme Rail",
-            "In June 2025 the administrative court upheld the fine against Acme Rail Systems and rejected the appeal.",
-        ),
-        "https://esg.example.net/acme": (
-            "Acme Rail ESG rating",
-            "Acme Rail Systems received an improved ESG rating after cutting emissions by a third.",
-        ),
-    }
-
-    def __init__(self):
-        self.searches = []
-
-    def post(self, url, json=None, headers=None, timeout=None):
-        assert headers["Authorization"] == "Bearer test-key"
-        if url.endswith("/search"):
-            q = json["query"].lower()
-            self.searches.append(q)
-            if "lawsuit" in q:
-                urls = ["https://news.example.com/acme-fined"]
-            elif "outcome" in q or "court" in q:
-                urls = ["https://court.example.org/acme-ruling"]
-            elif "esg" in q:
-                urls = ["https://esg.example.net/acme"]
-            else:
-                urls = []
-            body = {"results": [{"url": u, "title": self.PAGES[u][0], "content": self.PAGES[u][1][:80], "score": 0.9} for u in urls]}
-        else:
-            body = {"results": [{"url": u, "raw_content": self.PAGES[u][1]} for u in json["urls"] if u in self.PAGES]}
-        return Resp(body)
-
-
-class Resp:
-    status_code = 200
-
-    def __init__(self, body):
-        self._body = body
-
-    def raise_for_status(self):
-        pass
-
-    def json(self):
-        return self._body
+from .fakes import use_research_llm, use_tavily
 
 
 @pytest.fixture
 def tavily(monkeypatch):
-    fake = FakeTavily()
-    monkeypatch.setattr(settings, "mock_search", False)
-    monkeypatch.setattr(settings, "tavily_api_key", "test-key")
-    monkeypatch.setattr(search.httpx, "post", fake.post)
+    fake = use_tavily(monkeypatch)
+    use_research_llm(monkeypatch)
     sanctions.reset_cache()
     yield fake
     sanctions.reset_cache()
-
-
-def scripted_llm(monkeypatch):
-    """LLM that triages honestly but also invents claims; the agent must reject or drop them."""
-
-    def complete_json(system, user, fast=True, max_tokens=1500):
-        if "plan" in system.lower():
-            return {"plan": []}  # fall back to the default plan
-        if "follow-up" in system.lower():
-            return {"queries": ['"Acme Rail Systems" weld records fine outcome', '"Acme Rail Systems" court appeal ruling']}
-        findings = []
-        for url, (_, text) in FakeTavily.PAGES.items():
-            if url in user:
-                first = text.split(". ")[0].rstrip(".") + "."
-                red = "fined" in first or "upheld" in first
-                findings.append({"url": url, "quote": first, "classification": "red_flag" if red else "positive",
-                                 "severity": "high" if red else "low", "summary": first[:60]})
-        if "Litigation" in user and "follow-up on the lead" not in user:
-            findings.append({"url": "https://invented.example/fake", "quote": "Acme Rail Systems was fined EUR 4 million",
-                             "classification": "red_flag", "severity": "critical", "summary": "invented source"})
-            findings.append({"url": "", "quote": "Acme hides losses.", "classification": "red_flag",
-                             "severity": "critical", "summary": "no source at all"})
-            findings.append({"url": "https://news.example.com/acme-fined", "quote": "Acme Rail went bankrupt in 2023.",
-                             "classification": "red_flag", "severity": "critical", "summary": "misquote"})
-        return {"findings": findings}
-
-    monkeypatch.setattr(llm, "is_mock", lambda: False)
-    monkeypatch.setattr(llm, "complete_json", complete_json)
-    monkeypatch.setattr(llm, "chat", lambda *a, **k: {"content": "Acme Rail Systems was fined [F1] [F99].", "tool_calls": []})
 
 
 def run(company="Acme Rail Systems"):
@@ -114,7 +31,6 @@ def test_plan_covers_all_angles(tavily):
 
 
 def test_red_flag_gets_follow_up_and_budget_is_respected(tavily, monkeypatch):
-    scripted_llm(monkeypatch)
     events, report = run()
     digs = [e for e in events if e["type"] == "dig"]
     assert digs, "a red flag should trigger dig-deeper"
@@ -127,7 +43,6 @@ def test_red_flag_gets_follow_up_and_budget_is_respected(tavily, monkeypatch):
 
 
 def test_verification_drops_unsourced_claims(tavily, monkeypatch):
-    scripted_llm(monkeypatch)
     events, report = run()
     urls = {f["url"] for c in report["categories"] for f in c["evidence"]}
     assert "https://invented.example/fake" not in urls and "" not in urls
@@ -143,7 +58,6 @@ def test_verification_drops_unsourced_claims(tavily, monkeypatch):
 
 
 def test_single_source_marking(tavily, monkeypatch):
-    scripted_llm(monkeypatch)
     _, report = run()
     legal = next(c for c in report["categories"] if c["key"] == "legal")
     assert legal["level"] == "High"
@@ -154,7 +68,6 @@ def test_single_source_marking(tavily, monkeypatch):
 
 
 def test_report_lists_searches_without_findings(tavily, monkeypatch):
-    scripted_llm(monkeypatch)
     _, report = run()
     empty = {x["key"] for x in report["searched_without_findings"]}
     assert {"cyber", "supply", "ownership"} <= empty
@@ -172,7 +85,13 @@ def test_sanctions_possible_match_is_never_confirmed(tavily):
     assert sanctions.check("Siemens Mobility GmbH")["status"] == "no match"
 
 
-def test_research_stream_endpoint(sample_client):
+def test_research_requires_keys():
+    events = list(research.ResearchAgent("Acme Rail Systems").run())
+    assert [e["type"] for e in events] == ["error"]
+    assert "TAVILY_API_KEY" in events[0]["message"] and "LLM_API_KEY" in events[0]["message"]
+
+
+def test_research_stream_endpoint(sample_client, tavily):
     with sample_client.stream("GET", "/api/research/stream", params={"company": "Acme Rail Systems"}) as r:
         assert r.status_code == 200
         body = "".join(r.iter_text())
@@ -180,5 +99,5 @@ def test_research_stream_endpoint(sample_client):
     reports = sample_client.get("/api/research").json()
     assert reports and reports[0]["company"] == "Acme Rail Systems"
     full = sample_client.get(f"/api/research/{reports[0]['id']}").json()
-    assert full["mock"]["search"] is True
+    assert full["sources"] and all(src["url"].startswith("https://") for src in full["sources"])
     assert sample_client.get("/api/research/../../etc").status_code == 404

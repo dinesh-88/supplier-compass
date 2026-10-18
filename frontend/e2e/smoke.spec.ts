@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("log in → filter → add 3 to compare → compare → ask (mock) → memo", async ({ page }) => {
+test("log in → filter → add 3 to compare → compare → ask → memo", async ({ page }) => {
   await page.goto("/");
   await page.fill('input[name="username"]', "jury");
   await page.fill('input[name="password"]', "jury-e2e");
@@ -26,13 +26,13 @@ test("log in → filter → add 3 to compare → compare → ask (mock) → memo
   await expect(page.getByTestId("heatmap").locator("tbody tr")).toHaveCount(3);
   await expect(page.getByTestId("why-a-over-b")).toContainText("gap of");
 
-  // Ask about these (mock LLM).
+  // Ask about these (answered by the test-only fake LLM through the real tool loop).
   await page.getByTestId("ask-about-these").click();
   await page.getByTestId("chat-input").fill("Why is the Total Risk Index of SUPP_00018 so high?");
   await page.getByTestId("chat-send").click();
   const answer = page.getByTestId("chat-answer").last();
-  await expect(answer).toContainText("Mock LLM");
-  await expect(answer).toContainText("Operational Resilience");
+  await expect(answer).toContainText("SUPP_00018 has index 80");
+  await expect(answer).toContainText("Operational Resilience +4.5");
   await answer.getByTestId("how-i-got-this").locator("summary").click();
   await expect(answer.getByTestId("how-i-got-this")).toContainText("explain_index");
   await page.getByLabel("Close assistant").click();

@@ -38,8 +38,8 @@ export default function Layout() {
               {meta.file_name} · <span className="num">{meta.row_count.toLocaleString()}</span> suppliers
             </span>
           )}
-          {me?.mock_llm && <Badge tone="warn" title="MOCK_LLM=1 or no LLM_API_KEY: chat answers are canned">Mock LLM</Badge>}
-          {me?.mock_search && <Badge tone="warn" title="MOCK_SEARCH=1 or no TAVILY_API_KEY: search results are canned">Mock search</Badge>}
+          {me && !me.llm_configured && <Badge tone="warn" title="Set LLM_API_KEY: chat and memo prose are unavailable">LLM not configured</Badge>}
+          {me && !me.search_configured && <Badge tone="warn" title="Set TAVILY_API_KEY: company research is unavailable">Search not configured</Badge>}
           {loaded && (
             <button className="btn-primary" onClick={() => openChat(compare)} aria-pressed={chat.open}>
               Ask

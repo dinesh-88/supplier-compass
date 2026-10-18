@@ -8,7 +8,7 @@ import { Badge, Spinner } from "./ui";
 type TraceEntry = { tool: string; args: Record<string, unknown>; ms: number; error?: string; sql?: string; result?: Record<string, unknown> };
 type Chart = { type: string; title: string; option: Record<string, unknown>; source: Record<string, unknown> };
 type Action = { type: "add_to_compare"; ids: string[] };
-type Reply = { answer: string; trace: TraceEntry[]; charts: Chart[]; actions: Action[]; mock: boolean; model: string; error: boolean };
+type Reply = { answer: string; trace: TraceEntry[]; charts: Chart[]; actions: Action[]; model: string; error: boolean };
 type Msg = { role: "user"; content: string } | ({ role: "assistant"; content: string } & Partial<Reply>);
 
 const SUGGESTIONS = [
@@ -122,7 +122,7 @@ export default function ChatPanel() {
                   </button>
                 ) : null,
               )}
-              {m.trace && <Trace trace={m.trace} mock={!!m.mock} model={m.model} />}
+              {m.trace && <Trace trace={m.trace} model={m.model} />}
             </div>
           ),
         )}
@@ -157,11 +157,11 @@ export default function ChatPanel() {
   );
 }
 
-function Trace({ trace, mock, model }: { trace: TraceEntry[]; mock: boolean; model?: string }) {
+function Trace({ trace, model }: { trace: TraceEntry[]; model?: string }) {
   return (
     <details className="mt-2 rounded-md border border-line bg-canvas text-xs" data-testid="how-i-got-this">
       <summary className="cursor-pointer select-none px-3 py-1.5 font-medium text-ink-2">
-        How I got this · {trace.length} tool call{trace.length === 1 ? "" : "s"} · {mock ? "mock LLM" : model}
+        How I got this · {trace.length} tool call{trace.length === 1 ? "" : "s"} · {model}
       </summary>
       <div className="space-y-3 border-t border-line px-3 py-2">
         {trace.length === 0 && <p className="text-ink-3">No tools were called.</p>}

@@ -36,23 +36,12 @@ CLASSES = {"red_flag", "neutral", "positive"}
 MAX_FOLLOWUPS_PER_FLAG = 2
 PAGES_PER_ANGLE = 3
 
-RED_WORDS = re.compile(
-    r"\b(fined|fine of|penalt|lawsuit|sued|bankrupt|insolven|recall|breach|hacked|ransomware|strike|sanctioned|"
-    r"investigation|accident|fatal|default|downgrade|halt|shortage|fraud|bribery|corruption|violation)", re.I)
-POSITIVE_WORDS = re.compile(r"\b(top quartile|award|improved|upgrade|record profit|certified|rated (?:highly|top))", re.I)
-
-
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s or "").strip().lower()
 
 
 def _domain(url: str) -> str:
     return urlparse(url).netloc.lower().removeprefix("www.")
-
-
-def _sentences(text: str) -> list[str]:
-    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"“])", re.sub(r"\s+", " ", text or ""))
-    return [p.strip() for p in parts if 30 <= len(p.strip()) <= 400]
 
 
 class Budget:
@@ -78,15 +67,18 @@ class ResearchAgent:
         self.rejected: list[dict] = []
         self.chain: list[dict] = []
         self.searched: dict[str, list[dict]] = {k: [] for k, _, _ in ANGLES}
-        self.use_llm = not llm.is_mock()
         self._ids = 0
 
     # ------------------------------------------------------------------ events
 
     def run(self) -> Iterator[dict]:
         started = datetime.now(timezone.utc)
+        missing = [k for k, ok in (("TAVILY_API_KEY", search.configured()), ("LLM_API_KEY", llm.configured())) if not ok]
+        if missing:
+            yield {"type": "error", "message": f"Research is not configured: set {' and '.join(missing)} and restart."}
+            return
         yield {"type": "start", "company": self.company, "country": self.country, "website": self.website,
-               "budget": self.budget.limit, "mock_search": search.is_mock(), "mock_llm": llm.is_mock()}
+               "budget": self.budget.limit}
 
         plan = self.plan()
         yield {"type": "plan", "plan": plan}
@@ -156,8 +148,6 @@ class ResearchAgent:
         where = f" {self.country}" if self.country else ""
         default = [{"angle": k, "label": label, "query": f"\"{self.company}\"{where} {kw}",
                     "why": f"Look for {label.lower()} signals."} for k, label, kw in ANGLES]
-        if not self.use_llm:
-            return default
         prompt = (
             f"Company: {self.company}\nCountry: {self.country or 'unknown'}\nWebsite: {self.website or 'unknown'}\n"
             "Write one web search query per research angle to find supplier risk signals about this exact company. "
@@ -176,7 +166,7 @@ class ResearchAgent:
         return [by_angle.get(d["angle"], d) for d in default]
 
     def triage(self, angle: str, pages: list[dict], lead: dict | None) -> list[dict]:
-        raw = self._triage_llm(angle, pages, lead) if self.use_llm else self._triage_heuristic(angle, pages)
+        raw = self._triage_llm(angle, pages, lead)
         out = []
         for item in raw:
             f = self._validate(item, angle, pages, lead)
@@ -201,38 +191,17 @@ class ResearchAgent:
         )
         try:
             out = llm.complete_json("You triage supplier risk evidence. Output JSON only.", prompt, max_tokens=1800)
-        except llm.LLMError:
-            return self._triage_heuristic(angle, pages)
+        except llm.LLMError as exc:
+            self.rejected.append({"url": "", "quote": "", "classification": "neutral", "category": angle,
+                                  "reason": f"triage failed: {exc}"})
+            return []
         items = out.get("findings", []) if isinstance(out, dict) else out if isinstance(out, list) else []
         return [i for i in items if isinstance(i, dict)]
-
-    def _triage_heuristic(self, angle: str, pages: list[dict]) -> list[dict]:
-        """Offline triage: keyword rules over sentences that mention the company."""
-        out = []
-        key = self.company.lower().split()[0] if self.company else ""
-        for p in pages:
-            for s in _sentences(p["text"]):
-                if s.lower().startswith("this is a mock article"):
-                    continue
-                mentions = key in s.lower() or s.lower().startswith(("the company", "the regulator", "analysts"))
-                if not mentions:
-                    continue
-                if RED_WORDS.search(s):
-                    cls, sev = "red_flag", "medium"
-                elif POSITIVE_WORDS.search(s):
-                    cls, sev = "positive", "low"
-                else:
-                    continue  # generic sentences are not evidence
-                out.append({"url": p["url"], "quote": s, "classification": cls, "severity": sev,
-                            "summary": s[:90] + ("…" if len(s) > 90 else "")})
-        return out[:6]
 
     def followup_queries(self, flag: dict) -> list[str]:
         base = f"\"{self.company}\""
         lead_words = " ".join(re.sub(r"[^\w\s-]", " ", flag["summary"]).split()[:8])
         default = [f"{base} {lead_words} outcome", f"{base} {ANGLE_LABEL[flag['category']].lower()} follow-up court OR settlement OR fined"]
-        if not self.use_llm:
-            return default
         prompt = (
             f"Company: {self.company}. Lead: {flag['summary']}\nQuote: {flag['quote']}\n"
             "Write up to 2 web search queries to establish who was involved, when it happened and the outcome. "
@@ -275,7 +244,6 @@ class ResearchAgent:
             "summary": str(item.get("summary") or quote[:90])[:160],
             "date": str(item.get("date") or "")[:40],
             "followup_of": lead["id"] if lead else None,
-            "mock": url.startswith(search.MOCK_DOMAIN),
             "provisional": url not in self.sources,
         }
 
@@ -342,10 +310,7 @@ class ResearchAgent:
         reasons = [f"{angles_with_results} of {len(ANGLES)} angles returned search results",
                    f"{len(self.findings)} verified findings from {len({f['domain'] for f in self.findings})} domains",
                    f"{corroborated} of {len(reds)} red flags corroborated by a second source"]
-        if search.is_mock():
-            conf = "Low"
-            reasons.insert(0, "search results are canned mock data (MOCK_SEARCH)")
-        elif angles_with_results >= 6 and (not reds or corroborated == len(reds)):
+        if angles_with_results >= 6 and (not reds or corroborated == len(reds)):
             conf = "High"
         elif angles_with_results >= 4:
             conf = "Medium"
@@ -370,7 +335,6 @@ class ResearchAgent:
             "chain": self.chain,
             "sources": [{"url": s["url"], "title": s["title"], "domain": _domain(s["url"]), "angle": s["angle"]}
                         for s in self.sources.values()],
-            "mock": {"search": search.is_mock(), "llm": llm.is_mock()},
         }
         report["executive_summary"] = self.summary(report)
         return report
@@ -389,8 +353,6 @@ class ResearchAgent:
             "confidence": report["confidence"]["level"],
         }
         fallback = self._summary_template(facts)
-        if not self.use_llm:
-            return fallback
         prompt = (
             "Write a 3–5 sentence executive summary for a procurement buyer from these verified facts only. "
             "Cite red flags by their id in square brackets, e.g. [F2]. Mention single-source claims as such. "
@@ -454,5 +416,5 @@ def list_reports(user_dir: Path) -> list[dict]:
         except (OSError, json.JSONDecodeError):
             continue
         out.append({k: r.get(k) for k in ("id", "company", "country", "research_date", "overall_level", "finished_at")}
-                   | {"confidence": r.get("confidence", {}).get("level"), "mock": r.get("mock")})
+                   | {"confidence": r.get("confidence", {}).get("level")})
     return out

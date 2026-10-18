@@ -1,6 +1,8 @@
 from app import llm, memo
 from app import weights as wmod
 
+from .fakes import use_llm, use_research_llm, use_tavily
+
 IDS = ["SUPP_00012", "SUPP_00450", "SUPP_00731", "SUPP_00018"]
 
 
@@ -14,12 +16,17 @@ def test_number_guard_removes_invented_numbers(ds):
 
 
 def test_llm_prose_is_number_checked(ds, monkeypatch):
-    monkeypatch.setattr(llm, "is_mock", lambda: False)
-    monkeypatch.setattr(llm, "chat", lambda *a, **k: {"content": "Prefer SUPP_00012 (index 60). It saves 1234 EUR.", "tool_calls": []})
+    use_llm(monkeypatch, lambda *a, **k: {"content": "Prefer SUPP_00012 (index 60). It saves 1234 EUR.", "tool_calls": []})
     f = memo.build_facts(ds, IDS, None, "Official index", [])
     p = memo.write_prose(f, "")
     assert p["text"] == "Prefer SUPP_00012 (index 60)."
     assert p["removed"] == ["It saves 1234 EUR."]
+
+
+def test_memo_without_llm_uses_data_template(sample_client):
+    r = sample_client.post("/api/memo", json={"ids": IDS}).json()
+    assert r["prose"]["source"] == "template (LLM not configured)"
+    assert "Prefer SUPP_00731" in r["markdown"]  # lowest official index of the four (57)
 
 
 def test_memo_endpoint_with_custom_weights(sample_client, ds):
@@ -36,10 +43,13 @@ def test_memo_endpoint_with_custom_weights(sample_client, ds):
     assert "Operational Resilience score 95 (Critical, +4.5" in md
 
 
-def test_memo_attaches_research_and_exports_pdf(sample_client):
+def test_memo_attaches_research_and_exports_pdf(sample_client, monkeypatch):
+    use_tavily(monkeypatch)
+    use_research_llm(monkeypatch)
     with sample_client.stream("GET", "/api/research/stream", params={"company": "Memo Test Rail"}) as r:
         "".join(r.iter_text())
     rid = next(x["id"] for x in sample_client.get("/api/research").json() if x["company"] == "Memo Test Rail")
+    monkeypatch.setattr("app.config.settings.llm_api_key", "")  # memo prose falls back to the data template
     md = sample_client.post("/api/memo", json={"ids": IDS[:2], "research_ids": [rid]}).json()["markdown"]
     assert "## Attached research reports" in md and "Memo Test Rail" in md
     pdf = sample_client.post("/api/memo/pdf", json={"markdown": md, "filename": "x"})

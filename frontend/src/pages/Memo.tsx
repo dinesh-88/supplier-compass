@@ -6,7 +6,7 @@ import Markdown from "../components/Markdown";
 import { weightsLabel } from "../components/WeightsBar";
 import { Badge, LevelChip, Spinner } from "../components/ui";
 
-type ReportSummary = { id: string; company: string; research_date: string; overall_level: string; confidence: string; mock: { search: boolean } };
+type ReportSummary = { id: string; company: string; research_date: string; overall_level: string; confidence: string };
 type MemoResult = { markdown: string; prose: { source: string; removed: string[] } };
 
 export default function Memo() {
@@ -108,8 +108,7 @@ export default function Memo() {
               <input type="checkbox" className="accent-[var(--color-accent)]" checked={attach.includes(r.id)} onChange={() => setAttach((a) => (a.includes(r.id) ? a.filter((x) => x !== r.id) : [...a, r.id]))} />
               <span className="flex-1 truncate">{r.company}</span>
               <LevelChip size="xs" level={r.overall_level} />
-              {r.mock?.search && <Badge tone="warn">mock</Badge>}
-            </label>
+                          </label>
           ))}
         </div>
         <button className="btn-primary w-full justify-center" onClick={generate} disabled={busy} data-testid="memo-generate">

@@ -6,8 +6,8 @@ _TMP = tempfile.mkdtemp(prefix="sc-test-")
 os.environ.update(
     DATA_DIR=_TMP,
     APP_USERS="jury:jury-pass,other:other-pass",
-    MOCK_LLM="1",
-    MOCK_SEARCH="1",
+    LLM_API_KEY="",
+    TAVILY_API_KEY="",
     STATIC_DIR=str(Path(_TMP) / "no-static"),
     SANCTIONS_DIR=str(Path(__file__).parent / "fixtures" / "sanctions"),
     SECRET_KEY="test-secret",

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, type CustomIndex, type DatasetMeta, type SuppliersData } from "./api";
 
-export type Me = { user: string; mock_llm: boolean; mock_search: boolean; model: string };
+export type Me = { user: string; llm_configured: boolean; search_configured: boolean; model: string };
 
 export type Range = [number, number];
 export type Filters = {

@@ -105,7 +105,7 @@ def build_facts(ds: Dataset, ids: list[str], weights: dict | None, preset_label:
              "categories": [{"label": c["label"], "level": c["level"], "red_flags": c["red_flags"]} for c in r["categories"]],
              "red_flags": [{"id": f["id"], "quote": f["quote"], "url": f["url"], "domain": f["domain"], "single_source": f.get("single_source", True)}
                            for c in r["categories"] for f in c["evidence"] if f["classification"] == "red_flag"][:8],
-             "mock": r.get("mock", {})}
+             }
             for r in research
         ],
     }
@@ -170,8 +170,9 @@ def check_numbers(prose: str, facts: dict) -> tuple[str, list[str]]:
 
 def write_prose(facts: dict, rationale: str) -> dict:
     sl = facts["shortlist"]
-    if llm.is_mock() or not sl:
-        return {"text": _template_prose(facts, rationale), "removed": [], "source": "template (mock LLM)" if llm.is_mock() else "template"}
+    if not llm.configured() or not sl:
+        return {"text": _template_prose(facts, rationale), "removed": [],
+                "source": "template (LLM not configured)" if not llm.configured() else "template"}
     prompt = (
         "Write the prose part of a supplier shortlist memo for a rail procurement buyer: two short paragraphs, "
         "(1) recommendation: which supplier to prefer and why, (2) what the buyer should do before awarding "
@@ -196,7 +197,7 @@ def _template_prose(facts: dict, rationale: str) -> str:
     top = sl[0]
     basis = "your custom weights" if not facts["official_weights"] else "the official Total Risk Index"
     idx = f"{_num(top['custom_index'], 1)} under {facts['preset_label']} (official {_num(top['official_index'])})" if top["custom_index"] is not None else _num(top["official_index"])
-    p1 = f"{llm.MOCK_LABEL if llm.is_mock() else ''} Prefer {top['supplierID']} ({top['name']}): it has the lowest index in the shortlist by {basis}, {idx}, {top['official_level']}.".strip()
+    p1 = f"Prefer {top['supplierID']} ({top['name']}): it has the lowest index in the shortlist by {basis}, {idx}, {top['official_level']}."
     if facts.get("top_two"):
         t = facts["top_two"]
         if t["index_gap"]:
@@ -286,8 +287,7 @@ def to_markdown(facts: dict, prose: dict, rationale: str, title: str) -> str:
         L.append("## Attached research reports")
         for r in facts["research"]:
             L.append("")
-            mock = " (mock data)" if r["mock"].get("search") else ""
-            L.append(f"### {r['company']}{(' (' + r['country'] + ')') if r['country'] else ''}: {r['overall_level']}{mock}")
+            L.append(f"### {r['company']}{(' (' + r['country'] + ')') if r['country'] else ''}: {r['overall_level']}")
             L.append("")
             L.append(f"Research date {r['date']} · confidence {r['confidence']} · sanctions screening: {r['sanctions']}.")
             L.append("")

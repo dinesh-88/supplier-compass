@@ -10,20 +10,15 @@ import httpx
 
 from .config import settings
 
-MOCK_LABEL = "[Mock LLM, canned response, MOCK_LLM=1]"
-
-
 class LLMError(RuntimeError):
     pass
 
 
-def is_mock() -> bool:
-    return settings.mock_llm or not settings.llm_api_key
+def configured() -> bool:
+    return bool(settings.llm_api_key)
 
 
 def model_name(fast: bool = False) -> str:
-    if is_mock():
-        return "mock"
     return settings.fast_model if fast else settings.llm_model
 
 
@@ -34,8 +29,8 @@ _THINK_RE = re.compile(r"<think>.*?</think>", re.S)
 def chat(messages: list[dict], tools: list[dict] | None = None, fast: bool = False, temperature: float = 0.2,
          max_tokens: int = 1500, json_mode: bool = False, timeout: float = 90.0) -> dict:
     """One completion. Returns {"content": str, "tool_calls": [{"id","name","arguments"}]}."""
-    if is_mock():
-        raise LLMError("chat() called in mock mode")
+    if not configured():
+        raise LLMError("LLM_API_KEY is not set")
     body: dict = {
         "model": model_name(fast),
         "messages": messages,
