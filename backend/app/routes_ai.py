@@ -88,3 +88,43 @@ def research_delete(rid: str, user: str = Depends(current_user)):
         raise HTTPException(404, "No such report")
     (rmod.reports_dir(registry.user_dir(user)) / f"{rid}.json").unlink(missing_ok=True)
     return {"ok": True}
+
+
+# --------------------------------------------------------------------------- memo
+
+from fastapi.responses import Response  # noqa: E402
+
+from . import memo as memomod  # noqa: E402
+
+
+class MemoBody(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=20)
+    weights: dict[str, float] | None = None
+    preset_label: str = Field("Custom weights", max_length=80)
+    rationale: str = Field("", max_length=2000)
+    research_ids: list[str] = Field(default_factory=list, max_length=10)
+    title: str = Field("Supplier shortlist memo", max_length=120)
+
+
+@app.post("/api/memo")
+def memo(body: MemoBody, user: str = Depends(current_user), ds: Dataset = Depends(dataset_for)):
+    reports = [r for r in (rmod.load(registry.user_dir(user), rid) for rid in body.research_ids) if r]
+    try:
+        facts = memomod.build_facts(ds, body.ids, body.weights, body.preset_label, reports)
+    except KeyError as exc:
+        raise HTTPException(404, f"No supplier {exc.args[0]}")
+    prose = memomod.write_prose(facts, body.rationale)
+    md = memomod.to_markdown(facts, prose, body.rationale, body.title)
+    return {"markdown": md, "facts": facts, "prose": prose}
+
+
+class PdfBody(BaseModel):
+    markdown: str = Field(max_length=200_000)
+    filename: str = Field("shortlist-memo", max_length=80)
+
+
+@app.post("/api/memo/pdf")
+def memo_pdf(body: PdfBody):
+    pdf = memomod.to_pdf(body.markdown)
+    name = re.sub(r"[^A-Za-z0-9_-]+", "-", body.filename).strip("-") or "shortlist-memo"
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})

@@ -86,6 +86,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [filters, setFilters] = useState<Filters | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
+  const hydratedKey = useRef<string | null>(null);
 
   useEffect(() => {
     api
@@ -103,14 +104,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (m.loaded) {
       const d = await api.get<SuppliersData>("/api/suppliers");
       setData(d);
-      setWeightsState(m.formula.weights);
-      setPresetKey("official");
+      const key = `sc:${me?.user}:${m.uploaded_at}`;
+      const saved = loadLocal<{ weights?: Record<string, number>; presetKey?: string; compare?: string[] }>(key, {});
+      const valid = saved.weights && Object.keys(m.formula.weights).every((c) => typeof saved.weights![c] === "number");
+      setWeightsState(valid ? saved.weights! : m.formula.weights);
+      setPresetKey(valid ? (saved.presetKey ?? "custom") : "official");
       setCustom(null);
       setFilters(null);
-      const key = `sc:compare:${me?.user}:${m.uploaded_at}`;
       const ids = new Set(d.ids);
-      setCompare(loadLocal<string[]>(key, []).filter((id) => ids.has(id)));
+      setCompare((saved.compare ?? []).filter((id) => ids.has(id)));
+      hydratedKey.current = key;
     } else {
+      hydratedKey.current = null;
       setData(null);
       setCompare([]);
     }
@@ -125,8 +130,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [me, refreshMeta]);
 
   useEffect(() => {
-    if (meta && meta.loaded && me) saveLocal(`sc:compare:${me.user}:${meta.uploaded_at}`, compare);
-  }, [compare, meta, me]);
+    // Only after this dataset's saved state has been restored, so a reload never overwrites it.
+    if (!meta || !meta.loaded || !me) return;
+    const key = `sc:${me.user}:${meta.uploaded_at}`;
+    if (hydratedKey.current === key) saveLocal(key, { compare, weights, presetKey });
+  }, [compare, weights, presetKey, meta, me]);
 
   const isOfficial = useMemo(() => {
     if (!meta || !meta.loaded || !Object.keys(weights).length) return true;
