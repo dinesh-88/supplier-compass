@@ -81,6 +81,9 @@ export default function Compare() {
         <div className="ml-auto flex gap-2">
           <button className="btn" onClick={clearCompare}>Clear</button>
           <button className="btn" onClick={() => openChat(compare)} data-testid="ask-about-these">Ask about these</button>
+          <button className="btn" onClick={() => nav(`/analyses?plugin=fault_tree&ids=${compare.join(",")}`)} data-testid="open-fault-tree">
+            Fault tree analysis
+          </button>
           <button className="btn-primary" onClick={() => nav("/memo")} data-testid="generate-memo">Generate shortlist memo</button>
         </div>
       </div>

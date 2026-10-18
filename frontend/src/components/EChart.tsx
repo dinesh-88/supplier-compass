@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts/core";
-import { BarChart, HeatmapChart, RadarChart, ScatterChart } from "echarts/charts";
+import { BarChart, HeatmapChart, RadarChart, ScatterChart, TreeChart } from "echarts/charts";
 import {
   DataZoomComponent,
   GridComponent,
@@ -18,6 +18,7 @@ echarts.use([
   HeatmapChart,
   RadarChart,
   ScatterChart,
+  TreeChart,
   GridComponent,
   LegendComponent,
   MarkLineComponent,

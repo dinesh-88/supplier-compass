@@ -84,6 +84,6 @@ function inline(text: string, onLink?: (href: string) => void): ReactNode {
       );
     }
     if ((p.startsWith("_") && p.endsWith("_")) || (p.startsWith("*") && p.endsWith("*") && p.length > 2)) return <em key={i}>{p.slice(1, -1)}</em>;
-    return <Fragment key={i}>{p}</Fragment>;
+    return <Fragment key={i}>{p.replace(/\\([\\`*_{}[\]()#+\-.!|>])/g, "$1")}</Fragment>;
   });
 }

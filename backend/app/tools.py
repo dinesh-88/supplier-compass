@@ -77,6 +77,21 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "run_analysis",
+        "description": "Run a risk-analysis plugin on suppliers, e.g. plugin 'fault_tree' (fault tree analysis of supply "
+        "failure: top-event probability, largest branch, most important cause, best mitigation). Probabilities are "
+        "illustrative and depend on stated assumptions; say so.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "plugin": {"type": "string", "description": "Plugin id, e.g. fault_tree"},
+                "ids": {"type": "array", "items": {"type": "string"}},
+                "params": {"type": "object", "description": "Optional plugin parameters"},
+            },
+            "required": ["plugin", "ids"],
+        },
+    },
+    {
         "name": "add_to_compare",
         "description": "Offer the user a button that adds these suppliers to their compare set (max 20).",
         "parameters": {
@@ -205,6 +220,17 @@ class Toolbox:
         ds = self.ds
         available = ds.score_cols + list(ds.metrics) + list(ds.text) + ["total_risk_index"]
         return descriptions.define(term, ds.meta["descriptions"], available, ds.formula["weights"])
+
+    def t_run_analysis(self, plugin: str, ids, params=None) -> dict:
+        from . import plugins
+
+        try:
+            res = plugins.run(self.ds, plugin, self._ids(ids), params or {})
+        except plugins.PluginError as exc:
+            raise ToolError(str(exc)) from exc
+        self.actions.append({"type": "open_analysis", "plugin": plugin, "ids": res["ids"]})
+        return {"plugin": res["plugin"], "summary": res["summary"], "assumptions": res["assumptions"],
+                "params": res["params"], "results": res["data"].get("chat") or _compact(res["data"])}
 
     def t_add_to_compare(self, ids) -> dict:
         ids = self._ids(ids)
@@ -335,6 +361,19 @@ class Toolbox:
                      "large": len(pts) > 2000}],
         )
         return opt, source
+
+
+def _compact(obj, depth: int = 0):
+    """Shrink plugin output for the model: short lists, rounded floats, no deep nesting."""
+    if isinstance(obj, float):
+        return round(obj, 4)
+    if isinstance(obj, dict):
+        if depth > 4:
+            return "…"
+        return {k: _compact(v, depth + 1) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_compact(v, depth + 1) for v in obj[:5]] + (["…"] if len(obj) > 5 else [])
+    return obj
 
 
 def summarise_result(result: dict, max_rows: int = 30) -> dict:

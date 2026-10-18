@@ -68,7 +68,7 @@ export default function Research() {
 
   function start(e: React.FormEvent) {
     e.preventDefault();
-    if (company.trim().length < 2) return;
+    if (running || company.trim().length < 2) return;
     es.current?.close();
     setSteps([]);
     setReport(null);

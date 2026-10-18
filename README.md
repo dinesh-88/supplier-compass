@@ -15,6 +15,7 @@ web carries a source link returned by a search tool.
 - [Jury logins](#jury-logins)
 - [How the brief is met](#how-the-brief-is-met)
 - [Two-minute demo script](#two-minute-demo-script)
+- [Risk-analysis plugins](docs/PLUGINS.md)
 - [Tests](#tests)
 - [Design decisions](#design-decisions)
 
@@ -112,6 +113,7 @@ one login share its dataset; give each juror their own name if they should not.
 | `LLM_API_KEY` | (empty) | required for chat, research and memo prose |
 | `LLM_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | chat and memo model (needs tool calling) |
 | `LLM_FAST_MODEL` | `LLM_MODEL` | research planning, triage and summary |
+| `LLM_REASONING_TOKENS` | `3000` | extra completion tokens for models that reason before answering (Nemotron 3) |
 | `TAVILY_API_KEY` | (empty) | required for research (web search and extraction) |
 | `DATA_DIR` | `./var` (Docker: `/data`) | per-user DuckDB files and reports |
 
@@ -215,6 +217,24 @@ radar, heatmap and scatter only) and `add_to_compare` (a UI button).
    per category in the dataset's band style with evidence quotes and links, searched-without-findings, sanctions,
    confidence with reasons, and the research date. Reports are saved per user and can be attached to the memo.
 
+### Risk-analysis plugins: fault tree analysis
+
+![Fault tree](docs/screenshots/8-fault-tree.png)
+
+Analyses are plugins (`backend/app/plugins/`, guide in [docs/PLUGINS.md](docs/PLUGINS.md)). A plugin declares
+its parameters and required columns and returns generic blocks (metrics, tables, charts, tabs, fault trees).
+The **Analyses** page, the **Fault tree analysis** button on Compare and the assistant's `run_analysis` tool
+pick up new plugins automatically.
+
+The first plugin is **fault tree analysis** of supply failure. The top event "supply of acceptable parts fails"
+is an OR of four branches: deliveries stop or are late, parts are unsafe or defective, the supplier becomes
+insolvent (AND of financial distress and no access to credit), and supply is stopped for compliance or
+governance reasons. A cyber attack only halts production together with no recovery capability (AND, a repeated
+event). Each basic event's probability comes from the supplier's risk score on an adjustable, clearly labelled
+scale. The plugin computes exact top-event probabilities, minimal cut sets, Fussell-Vesely and Birnbaum
+importance and the most effective mitigation, and ranks the selected suppliers. Trees are JSON files, so new
+top events can be modelled without code.
+
 ### Shortlist memo
 
 ![Memo](docs/screenshots/7-memo.png)
@@ -249,7 +269,7 @@ text label. Tabular numerals throughout, a 15 px base font, and layouts checked 
 ## Tests
 
 ```bash
-cd backend && ../.venv/bin/python -m pytest          # 64 tests
+cd backend && ../.venv/bin/python -m pytest          # 78 tests
 cd frontend && npx tsc -b                            # type-check
 cd frontend && npm run build && npx playwright test  # smoke test (starts the backend and a test-only fake LLM)
 ```
@@ -261,7 +281,9 @@ tables, table functions, file access, LIMIT); explain_index for SUPP_00018; the 
 a scripted LLM; the tool loop with a scripted LLM (including a rejected query and the "no tools" challenge); the
 research agent against a faked Tavily HTTP API (plan, follow-up on a red flag, the 25-search budget, verification
 dropping unsourced and misquoted claims, single-source marking, sanctions possible-match); the memo number check
-and PDF export; and auth on every `/api` route.
+and PDF export; the plugin registry and fault tree engine (gate math, exactness with repeated events against
+brute-force enumeration, minimal cut sets, the API, unavailability on datasets without the columns, the chat
+tool); and auth on every `/api` route.
 
 The Playwright smoke test logs in, loads the sample, filters to the exposure list, adds 3 suppliers to
 compare, opens Compare, asks a question (answered by a test-only fake LLM through the real tool loop) and checks the trace, then generates and downloads the memo.

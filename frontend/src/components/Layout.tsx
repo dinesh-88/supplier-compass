@@ -28,6 +28,7 @@ export default function Layout() {
               </NavLink>
             </>
           )}
+          {loaded && <NavLink to="/analyses" className={link}>Analyses</NavLink>}
           <NavLink to="/research" className={link}>Research</NavLink>
           {loaded && <NavLink to="/memo" className={link}>Memo</NavLink>}
           <NavLink to="/upload" className={link}>Data</NavLink>

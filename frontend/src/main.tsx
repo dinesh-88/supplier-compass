@@ -10,6 +10,7 @@ import Explore from "./pages/Explore";
 import Compare from "./pages/Compare";
 import Research from "./pages/Research";
 import Memo from "./pages/Memo";
+import Analyses from "./pages/Analyses";
 import { Spinner } from "./components/ui";
 
 function Gate() {
@@ -24,6 +25,7 @@ function Gate() {
         <Route path="/upload" element={<Upload />} />
         <Route path="/explore" element={loaded ? <Explore /> : <Navigate to="/upload" replace />} />
         <Route path="/compare" element={loaded ? <Compare /> : <Navigate to="/upload" replace />} />
+        <Route path="/analyses" element={loaded ? <Analyses /> : <Navigate to="/upload" replace />} />
         <Route path="/research" element={<Research />} />
         <Route path="/memo" element={loaded ? <Memo /> : <Navigate to="/upload" replace />} />
         <Route path="*" element={<Navigate to={loaded ? "/explore" : "/upload"} replace />} />

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useStore } from "../lib/store";
 import EChart from "./EChart";
@@ -7,7 +8,7 @@ import { Badge, Spinner } from "./ui";
 
 type TraceEntry = { tool: string; args: Record<string, unknown>; ms: number; error?: string; sql?: string; result?: Record<string, unknown> };
 type Chart = { type: string; title: string; option: Record<string, unknown>; source: Record<string, unknown> };
-type Action = { type: "add_to_compare"; ids: string[] };
+type Action = { type: "add_to_compare"; ids: string[] } | { type: "open_analysis"; plugin: string; ids: string[] };
 type Reply = { answer: string; trace: TraceEntry[]; charts: Chart[]; actions: Action[]; model: string; error: boolean };
 type Msg = { role: "user"; content: string } | ({ role: "assistant"; content: string } & Partial<Reply>);
 
@@ -20,6 +21,7 @@ const SUGGESTIONS = [
 
 export default function ChatPanel() {
   const { chat, closeChat, addCompare, notify, compare } = useStore();
+  const nav = useNavigate();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -119,6 +121,10 @@ export default function ChatPanel() {
                     }}
                   >
                     Add {a.ids.length} to compare
+                  </button>
+                ) : a.type === "open_analysis" ? (
+                  <button key={j} className="btn mt-2 ml-2" onClick={() => nav(`/analyses?plugin=${a.plugin}&ids=${a.ids.join(",")}`)}>
+                    Open full analysis
                   </button>
                 ) : null,
               )}

@@ -26,6 +26,12 @@ test("log in → filter → add 3 to compare → compare → ask → memo", asyn
   await expect(page.getByTestId("heatmap").locator("tbody tr")).toHaveCount(3);
   await expect(page.getByTestId("why-a-over-b")).toContainText("gap of");
 
+  // Fault tree analysis plugin on the compare set.
+  await page.getByTestId("open-fault-tree").click();
+  await expect(page.getByTestId("analysis-result")).toContainText("Suppliers ranked by probability of supply failure");
+  await expect(page.getByTestId("fault-tree").first()).toBeVisible();
+  await page.goBack();
+
   // Ask about these (answered by the test-only fake LLM through the real tool loop).
   await page.getByTestId("ask-about-these").click();
   await page.getByTestId("chat-input").fill("Why is the Total Risk Index of SUPP_00018 so high?");

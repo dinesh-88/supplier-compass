@@ -18,6 +18,7 @@ for (const s of steps) {
   if (kind === "click") await page.click(arg);
   if (kind === "fill") { const [sel, val] = arg.split("=>"); await page.fill(sel, val); }
   if (kind === "wait") await page.waitForTimeout(Number(arg));
+  if (kind === "waitfor") await page.waitForSelector(arg, { timeout: Number(name || 30000) });
   if (kind === "shot") await page.screenshot({ path: `${out}/${arg}.png`, fullPage: name === "full" });
   if (kind === "eval") console.log(await page.evaluate(arg));
 }

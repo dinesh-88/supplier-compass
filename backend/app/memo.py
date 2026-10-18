@@ -187,7 +187,10 @@ def write_prose(facts: dict, rationale: str) -> dict:
     except llm.LLMError:
         return {"text": _template_prose(facts, rationale), "removed": [], "source": "template (LLM unavailable)"}
     text, removed = check_numbers(text, facts)
-    return {"text": text or _template_prose(facts, rationale), "removed": removed, "source": llm.model_name()}
+    if not text.strip():
+        reason = "every sentence failed the number check" if removed else "the LLM returned no text"
+        return {"text": _template_prose(facts, rationale), "removed": removed, "source": f"template ({reason})"}
+    return {"text": text, "removed": removed, "source": llm.model_name()}
 
 
 def _template_prose(facts: dict, rationale: str) -> str:

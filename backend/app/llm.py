@@ -35,7 +35,7 @@ def chat(messages: list[dict], tools: list[dict] | None = None, fast: bool = Fal
         "model": model_name(fast),
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": max_tokens,
+        "max_tokens": max_tokens + settings.llm_reasoning_tokens,
     }
     if tools:
         body["tools"] = tools
@@ -54,7 +54,19 @@ def chat(messages: list[dict], tools: list[dict] | None = None, fast: bool = Fal
                           headers={"Authorization": f"Bearer {settings.llm_api_key}"})
     if resp.status_code >= 400:
         raise LLMError(f"LLM returned {resp.status_code}: {resp.text[:300]}")
-    msg = resp.json()["choices"][0]["message"]
+    choice = resp.json()["choices"][0]
+    msg = choice["message"]
+    if choice.get("finish_reason") == "length" and not (msg.get("content") or "").strip() and not msg.get("tool_calls"):
+        # Ran out of tokens while reasoning: retry once with a larger budget.
+        body["max_tokens"] *= 2
+        try:
+            resp = httpx.post(url, json=body, timeout=timeout * 2,
+                              headers={"Authorization": f"Bearer {settings.llm_api_key}"})
+        except httpx.HTTPError as exc:
+            raise LLMError(f"LLM request failed: {exc}") from exc
+        if resp.status_code >= 400:
+            raise LLMError(f"LLM returned {resp.status_code}: {resp.text[:300]}")
+        msg = resp.json()["choices"][0]["message"]
     content = _THINK_RE.sub("", msg.get("content") or "").strip()
     calls = []
     for tc in msg.get("tool_calls") or []:

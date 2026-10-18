@@ -128,3 +128,26 @@ def memo_pdf(body: PdfBody):
     pdf = memomod.to_pdf(body.markdown)
     name = re.sub(r"[^A-Za-z0-9_-]+", "-", body.filename).strip("-") or "shortlist-memo"
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+
+
+# --------------------------------------------------------------------------- risk-analysis plugins
+
+from . import plugins  # noqa: E402
+
+
+@app.get("/api/plugins")
+def plugin_list(ds: Dataset = Depends(dataset_for)):
+    return [p.describe(ds) for p in plugins.all_plugins()]
+
+
+class PluginRunBody(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=20)
+    params: dict = Field(default_factory=dict)
+
+
+@app.post("/api/plugins/{plugin_id}/run")
+def plugin_run(plugin_id: str, body: PluginRunBody, ds: Dataset = Depends(dataset_for)):
+    try:
+        return plugins.run(ds, plugin_id, body.ids, body.params)
+    except plugins.PluginError as exc:
+        raise HTTPException(422, str(exc))

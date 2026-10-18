@@ -1,0 +1,69 @@
+{
+  "id": "rail_supply",
+  "name": "Rail component supply failure",
+  "description": "Top event: the buyer does not receive acceptable parts on time from this supplier. Basic events are driven by the supplier's risk scores.",
+  "top": {
+    "id": "TOP",
+    "label": "Supply of acceptable parts fails",
+    "gate": "OR",
+    "children": [
+      {
+        "id": "G_DELIVERY",
+        "label": "Deliveries stop or are late",
+        "gate": "OR",
+        "children": [
+          {"id": "B_OPS", "label": "Production or logistics disruption", "column": "operational_resilience_score"},
+          {"id": "B_SUBTIER", "label": "Sub-tier supplier failure", "column": "sub_tier_visibility_score"},
+          {"id": "B_LABOUR", "label": "Strike or labour dispute", "column": "labor_stability_score"},
+          {"id": "B_HAZARD", "label": "Natural hazard at a site", "column": "environmental_exposure_score"},
+          {
+            "id": "G_REGION",
+            "label": "Regional instability",
+            "gate": "OR",
+            "children": [
+              {"id": "B_GEO", "label": "Geopolitical crisis", "column": "geopolitical_risk_score"},
+              {"id": "B_POLITICAL", "label": "Political unrest or government change", "column": "political_stability_score"}
+            ]
+          },
+          {
+            "id": "G_CYBER",
+            "label": "Cyber attack halts production",
+            "gate": "AND",
+            "children": [
+              {"id": "B_CYBER", "label": "Successful cyber attack", "column": "digital_security_score"},
+              {"ref": "B_OPS", "label": "No recovery capability"}
+            ]
+          }
+        ]
+      },
+      {
+        "id": "G_QUALITY",
+        "label": "Delivered parts are unsafe or defective",
+        "gate": "OR",
+        "children": [
+          {"id": "B_QUALITY", "label": "Quality defect or recall", "column": "quality_risk_score"},
+          {"id": "B_SAFETY", "label": "Safety incident in production", "column": "safety_incident_score"}
+        ]
+      },
+      {
+        "id": "G_INSOLVENCY",
+        "label": "Supplier becomes insolvent",
+        "gate": "AND",
+        "children": [
+          {"id": "B_FINANCE", "label": "Financial distress", "column": "financial_health_score"},
+          {"id": "B_CREDIT", "label": "No access to credit", "column": "credit_rating_score"}
+        ]
+      },
+      {
+        "id": "G_COMPLIANCE",
+        "label": "Supply stopped for compliance or governance reasons",
+        "gate": "OR",
+        "children": [
+          {"id": "B_COMPLIANCE", "label": "Regulatory action or lawsuit", "column": "compliance_risk_score"},
+          {"id": "B_GOVERNANCE", "label": "Governance or ethics failure", "column": "governance_risk_score"},
+          {"id": "B_ESG", "label": "ESG violation forces suspension", "column": "esg_performance_score"}
+        ]
+      }
+    ]
+  }
+}

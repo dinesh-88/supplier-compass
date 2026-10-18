@@ -119,11 +119,27 @@ def _execute(tb: Toolbox, trace: list[dict], name: str, args: dict) -> str:
     try:
         result = tb.call(name, args)
         trace.append(_trace_entry(name, args, result, None, (time.perf_counter() - t0) * 1000))
-        text = json.dumps(to_jsonable(result), default=str)
-        return text[:12000]
+        return _fit(to_jsonable(result))
     except ToolError as exc:
         trace.append(_trace_entry(name, args, None, str(exc), (time.perf_counter() - t0) * 1000))
         return json.dumps({"error": str(exc)})
+
+
+TOOL_RESULT_LIMIT = 24000
+
+
+def _fit(result) -> str:
+    """Tool result as JSON for the model; shortened structurally (never cut mid-JSON) when too large."""
+    from .tools import _compact
+
+    text = json.dumps(result, default=str)
+    if len(text) <= TOOL_RESULT_LIMIT:
+        return text
+    text = json.dumps({"note": "result shortened: lists cut to 5 items", "result": _compact(result)}, default=str)
+    if len(text) <= TOOL_RESULT_LIMIT:
+        return text
+    keys = list(result) if isinstance(result, dict) else []
+    return json.dumps({"error": "result too large to return; narrow the request", "keys": keys})
 
 
 def _has_numbers(text: str) -> bool:

@@ -37,6 +37,8 @@ class Settings:
         default_factory=lambda: os.environ.get("LLM_MODEL", "nvidia/nemotron-3-super-120b-a12b")
     )
     llm_fast_model: str = field(default_factory=lambda: os.environ.get("LLM_FAST_MODEL", ""))
+    # Reasoning models (e.g. Nemotron 3) spend completion tokens on reasoning before the answer.
+    llm_reasoning_tokens: int = field(default_factory=lambda: int(os.environ.get("LLM_REASONING_TOKENS", "3000")))
     tavily_api_key: str = field(default_factory=lambda: os.environ.get("TAVILY_API_KEY", ""))
 
     max_upload_bytes: int = 50 * 1024 * 1024
