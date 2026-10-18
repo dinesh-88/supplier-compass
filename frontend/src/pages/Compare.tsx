@@ -5,6 +5,7 @@ import { fmtEur, fmtPct, fmtSigned, levelColor, levelText, COOL, WARM } from "..
 import { useStore } from "../lib/store";
 import EChart, { AXIS } from "../components/EChart";
 import { weightsLabel } from "../components/WeightsBar";
+import SupplierPicker from "../components/SupplierPicker";
 import { Badge, LevelChip, LevelLegend, RankChange, Spinner } from "../components/ui";
 
 // Categorical slots 1–5 of the validated reference palette, in fixed order.
@@ -20,6 +21,8 @@ export default function Compare() {
   const [err, setErr] = useState<string | null>(null);
   const [sort, setSort] = useState<SortCol>({ key: "total_risk_index", desc: false });
   const [radar, setRadar] = useState<string[]>([]);
+  // Comparing needs suppliers: prompt for them as soon as the tab opens with none selected.
+  const [picking, setPicking] = useState(() => !compare.length);
   const presetName = meta && meta.loaded ? weightsLabel(presetKey, meta.presets) : "";
 
   useEffect(() => {
@@ -61,8 +64,9 @@ export default function Compare() {
     return (
       <div className="mx-auto max-w-xl p-10 text-center">
         <h1 className="text-xl font-semibold">Nothing to compare yet</h1>
-        <p className="mt-2 text-sm text-ink-2">Tick “add to compare” on up to 20 suppliers in Explore, or ask the assistant to “compare these”.</p>
-        <button className="btn-primary mt-4" onClick={() => nav("/explore")}>Go to Explore</button>
+        <p className="mt-2 text-sm text-ink-2">Select up to 20 suppliers, tick “add to compare” in Explore, or ask the assistant to “compare these”.</p>
+        <button className="btn-primary mt-4" onClick={() => setPicking(true)}>Select suppliers</button>
+        {picking && <SupplierPicker title="Select suppliers to compare" onClose={() => setPicking(false)} />}
       </div>
     );
   if (err) return <p className="p-6 text-sm text-lv-high">{err}</p>;
@@ -73,12 +77,14 @@ export default function Compare() {
 
   return (
     <div className="space-y-4 p-4">
+      {picking && <SupplierPicker title="Add suppliers to compare" onClose={() => setPicking(false)} />}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold">Compare <span className="num text-ink-3">{compare.length}</span></h1>
         <span className="text-xs text-ink-3">
           Index formula {data.formula} · {isOfficial ? "official weights" : <>custom weights: <strong>{presetName}</strong></>}
         </span>
         <div className="ml-auto flex gap-2">
+          <button className="btn" onClick={() => setPicking(true)} data-testid="add-suppliers">Add suppliers</button>
           <button className="btn" onClick={clearCompare}>Clear</button>
           <button className="btn" onClick={() => openChat(compare)} data-testid="ask-about-these">Ask about these</button>
           <button className="btn" onClick={() => nav(`/analyses?plugin=fault_tree&ids=${compare.join(",")}`)} data-testid="open-fault-tree">

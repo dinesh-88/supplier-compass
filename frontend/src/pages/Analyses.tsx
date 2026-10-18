@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { MAX_COMPARE, useStore } from "../lib/store";
-import type { SuppliersData } from "../lib/api";
+import { useStore } from "../lib/store";
+import SupplierPicker from "../components/SupplierPicker";
 import { Blocks, type Block } from "../components/PluginBlocks";
-import { Badge, Modal, Spinner } from "../components/ui";
+import { Badge, Spinner } from "../components/ui";
 
 type ParamSpec = {
   key: string;
@@ -31,8 +31,7 @@ type PluginInfo = {
 type RunResult = { plugin_name: string; title: string; summary: string; assumptions: string[]; blocks: Block[]; ids: string[]; params: Record<string, unknown> };
 
 export default function Analyses() {
-  const { compare, openChat, addCompare, data } = useStore();
-  const nav = useNavigate();
+  const { compare, openChat } = useStore();
   const [search, setSearch] = useSearchParams();
   const [list, setList] = useState<PluginInfo[] | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
@@ -93,19 +92,7 @@ export default function Analyses() {
 
   return (
     <div className="mx-auto grid max-w-[1400px] grid-cols-[320px_1fr] gap-4 p-4">
-      {picking && data && (
-        <SupplierPicker
-          data={data}
-          selected={ids}
-          min={plugin?.min_suppliers ?? 1}
-          onClose={() => setPicking(false)}
-          onExplore={() => nav("/explore")}
-          onConfirm={(picked) => {
-            addCompare(picked);
-            setPicking(false);
-          }}
-        />
-      )}
+      {picking && <SupplierPicker title="Select suppliers to analyse" min={plugin?.min_suppliers ?? 1} onClose={() => setPicking(false)} />}
       <aside className="space-y-4">
         <section className="card p-4">
           <h1 className="text-lg font-semibold">Risk analyses</h1>
@@ -185,65 +172,6 @@ export default function Analyses() {
         )}
       </main>
     </div>
-  );
-}
-
-function SupplierPicker({ data, selected, min, onClose, onExplore, onConfirm }: {
-  data: SuppliersData;
-  selected: string[];
-  min: number;
-  onClose: () => void;
-  onExplore: () => void;
-  onConfirm: (ids: string[]) => void;
-}) {
-  const [q, setQ] = useState("");
-  const [picked, setPicked] = useState<string[]>([]);
-  const room = MAX_COMPARE - selected.length;
-  const rows = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    const out: number[] = [];
-    for (let i = 0; i < data.ids.length && out.length < 200; i++) {
-      if (selected.includes(data.ids[i])) continue;
-      if (!t || data.ids[i].toLowerCase().includes(t) || (data.names[i] ?? "").toLowerCase().includes(t)) out.push(i);
-    }
-    return out;
-  }, [q, data, selected]);
-  const toggle = (id: string) =>
-    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < room ? [...cur, id] : cur));
-  const total = selected.length + picked.length;
-
-  return (
-    <Modal title="Select suppliers to analyse" onClose={onClose} width={560}>
-      <p className="mb-2 text-xs text-ink-3">
-        Analyses run on the compare set. Pick at least {min} supplier{min === 1 ? "" : "s"} (up to {MAX_COMPARE} in total).
-      </p>
-      <input className="input mb-2 w-full" placeholder="Search by ID or name" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
-      <ul className="max-h-[45vh] divide-y divide-line overflow-auto rounded-md border border-line">
-        {rows.map((i) => {
-          const id = data.ids[i];
-          const on = picked.includes(id);
-          return (
-            <li key={id}>
-              <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-canvas">
-                <input type="checkbox" className="accent-[var(--color-accent)]" checked={on} disabled={!on && picked.length >= room} onChange={() => toggle(id)} />
-                <span className="font-medium">{id}</span>
-                <span className="truncate text-ink-2">{data.names[i]}</span>
-                <span className="num ml-auto text-xs text-ink-3">{data.index[i]?.toFixed(2)}</span>
-              </label>
-            </li>
-          );
-        })}
-        {!rows.length && <li className="px-3 py-2 text-sm text-ink-3">No matching suppliers.</li>}
-      </ul>
-      <div className="mt-3 flex items-center gap-2">
-        <button className="btn-ghost text-xs" onClick={onExplore}>Browse in Explore instead</button>
-        <span className="ml-auto text-xs text-ink-3">{total} selected</span>
-        <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn-primary" disabled={!picked.length || total < min} onClick={() => onConfirm(picked)} data-testid="confirm-suppliers">
-          Use selected
-        </button>
-      </div>
-    </Modal>
   );
 }
 

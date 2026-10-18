@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useStore } from "../lib/store";
 import Markdown from "../components/Markdown";
 import { weightsLabel } from "../components/WeightsBar";
+import SupplierPicker from "../components/SupplierPicker";
 import { Badge, LevelChip, Spinner } from "../components/ui";
 
 type ReportSummary = { id: string; company: string; research_date: string; overall_level: string; confidence: string };
@@ -11,10 +11,11 @@ type MemoResult = { markdown: string; prose: { source: string; removed: string[]
 
 export default function Memo() {
   const { compare, weights, isOfficial, presetKey, meta, notify } = useStore();
-  const nav = useNavigate();
   const presets = meta && meta.loaded ? meta.presets : [];
   const presetName = isOfficial ? "Official index" : weightsLabel(presetKey, presets);
   const presetWhy = presets.find((p) => p.key === presetKey)?.why ?? "";
+  // The memo needs a shortlist: prompt for one as soon as the tab opens with none selected.
+  const [picking, setPicking] = useState(() => !compare.length);
   const [title, setTitle] = useState("Supplier shortlist memo");
   const [rationale, setRationale] = useState(presetWhy);
   const [reports, setReports] = useState<ReportSummary[]>([]);
@@ -75,13 +76,15 @@ export default function Memo() {
     return (
       <div className="mx-auto max-w-xl p-10 text-center">
         <h1 className="text-xl font-semibold">No shortlist yet</h1>
-        <p className="mt-2 text-sm text-ink-2">The memo is built from your compare set. Add suppliers in Explore first.</p>
-        <button className="btn-primary mt-4" onClick={() => nav("/explore")}>Go to Explore</button>
+        <p className="mt-2 text-sm text-ink-2">The memo is built from your compare set. Select the suppliers to shortlist first.</p>
+        <button className="btn-primary mt-4" onClick={() => setPicking(true)}>Select suppliers</button>
+        {picking && <SupplierPicker title="Select suppliers for the memo" onClose={() => setPicking(false)} />}
       </div>
     );
 
   return (
     <div className="mx-auto grid max-w-[1300px] grid-cols-[360px_1fr] gap-4 p-4">
+      {picking && <SupplierPicker title="Add suppliers to the memo" onClose={() => setPicking(false)} />}
       <aside className="card h-fit space-y-4 p-4">
         <div>
           <h1 className="text-lg font-semibold">Shortlist memo</h1>
@@ -92,7 +95,10 @@ export default function Memo() {
           <input className="input w-full" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
         </label>
         <div className="text-sm">
-          <div className="mb-1 font-medium">Shortlist ({compare.length})</div>
+          <div className="mb-1 flex items-center justify-between font-medium">
+            Shortlist ({compare.length})
+            <button className="btn-ghost text-xs" onClick={() => setPicking(true)}>Add suppliers</button>
+          </div>
           <div className="flex flex-wrap gap-1">{compare.map((id) => <Badge key={id}>{id}</Badge>)}</div>
         </div>
         <div className="text-sm">
