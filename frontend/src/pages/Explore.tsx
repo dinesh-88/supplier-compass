@@ -25,7 +25,7 @@ export default function Explore() {
 }
 
 function ExploreInner({ data, b, def, filters, setFilters }: { data: SuppliersData; b: Bounds; def: Filters; filters: Filters; setFilters: (f: Filters) => void }) {
-  const { custom, isOfficial, compare, toggleCompare, openDrawer, presetKey, meta } = useStore();
+  const { custom, isOfficial, compare, addCompare, notify, openDrawer, presetKey, meta } = useStore();
   const nav = useNavigate();
   const deferred = useDeferredValue(filters);
   const result = useMemo(() => applyFilters(data, deferred, def), [data, deferred, def]);
@@ -59,13 +59,8 @@ function ExploreInner({ data, b, def, filters, setFilters }: { data: SuppliersDa
   const nActive = activeFilterCount(filters, def);
 
   const addTop = (n: number) => {
-    let added = 0;
-    for (const i of sorted.slice(0, n)) {
-      if (!compare.includes(data.ids[i]) && compare.length + added < MAX_COMPARE) {
-        toggleCompare(data.ids[i]);
-        added++;
-      }
-    }
+    const added = addCompare(sorted.slice(0, n).map((i) => data.ids[i]));
+    if (!added) notify(compare.length >= MAX_COMPARE ? "The compare set is full." : "These suppliers are already in the compare set.");
   };
 
   return (
