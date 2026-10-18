@@ -4,6 +4,8 @@ A web app for the Siemens **Smart Supplier Selection for Trains** challenge. A r
 narrow 10,000 suppliers down to a justified choice: filter, rank, compare up to 20 side by side, ask questions
 in plain language, research a real company, and export a shortlist memo.
 
+**▶ [Watch the 2½-minute demo video](https://dinesh-88.github.io/supplier-compass/demo/)**
+
 Every number shown comes from the dataset (through a computation or a logged tool call). Every claim from the
 web carries a source link returned by a search tool.
 
