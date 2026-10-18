@@ -4,7 +4,7 @@ const BASE = process.env.BASE || "http://127.0.0.1:8000";
 const out = process.argv[2] || ".";
 const steps = process.argv.slice(3);
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+const page = await browser.newPage({ viewport: { width: Number(process.env.W || 1440), height: Number(process.env.H || 900) }, deviceScaleFactor: 1 });
 page.on("pageerror", (e) => console.log("PAGEERROR", e.message, (e.stack||"").split("\n").slice(0,6).join(" | ")));
 page.on("console", (m) => m.type() === "error" && console.log("CONSOLE", m.text()));
 await page.goto(BASE + "/");

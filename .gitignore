@@ -11,3 +11,5 @@ frontend/playwright-report/
 .DS_Store
 data/sanctions/*.json
 data/sanctions/raw/
+var-e2e/
+var-server.log

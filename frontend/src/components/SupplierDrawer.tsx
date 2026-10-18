@@ -61,8 +61,8 @@ export default function SupplierDrawer() {
                   <LevelChip level={d.level} value={d.total_risk_index} bands={bands} />
                 </Box>
                 <Box label="Percentile">
-                  <span className="num text-lg font-semibold">{Math.floor(d.percentile)}th</span>
-                  <span className="text-xs text-ink-3"> riskier than {Math.floor(d.percentile)}%</span>
+                  <span className="num text-lg font-semibold">{ordinal(d.percentile)}</span>
+                  <span className="text-xs text-ink-3"> riskier than {Math.floor(d.percentile)}% of suppliers</span>
                 </Box>
                 <Box label="Rank (1 = lowest risk)">
                   <span className="num text-lg font-semibold">#{d.official_rank.toLocaleString()}</span>
@@ -92,7 +92,9 @@ export default function SupplierDrawer() {
                 </div>
                 <p className="mb-1 text-xs text-ink-3">
                   {tab === "waterfall"
-                    ? "Each category adds weight × score points. They sum to the weighted total, which rounds (half to even) to the index."
+                    ? d.approximate
+                      ? `Approximate: with the inferred weights the categories add up to ${d.weighted_sum.toFixed(1)}; the file's index is ${d.total_risk_index}.`
+                      : "Each category adds weight × score points. They sum to the weighted total, which rounds (half to even) to the index."
                     : "weight × (score − mean score): how far each category pushes this supplier above (+) or below (−) an average supplier."}
                 </p>
                 {tab === "waterfall" ? <Waterfall d={d} /> : <AboveAverage d={d} />}
@@ -173,6 +175,13 @@ export default function SupplierDrawer() {
       </aside>
     </div>
   );
+}
+
+function ordinal(p: number): string {
+  const n = Math.floor(p);
+  if (n < 1) return "<1st";
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${n}${suffix}`;
 }
 
 function Box({ label, children }: { label: string; children: React.ReactNode }) {
