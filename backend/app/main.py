@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -16,25 +17,22 @@ from pydantic import BaseModel, Field
 from . import compare as cmp
 from . import descriptions, index_model
 from . import weights as wmod
-from .auth import COOKIE_NAME, current_user, make_session, read_session, users
+from .auth import DEMO_USER, current_user
 from .config import settings
 from .dataset import Dataset, DatasetError, category_label, registry
 
 app = FastAPI(title="Supplier Compass", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(GZipMiddleware, minimum_size=2048)
 
-PUBLIC_API = {"/api/login"}
 log = logging.getLogger("uvicorn.error")
 settings.data_dir.mkdir(parents=True, exist_ok=True)
 log.info("Supplier Compass: %s", settings.summary())
 
 
 @app.middleware("http")
-async def require_session(request: Request, call_next):
+async def workspace(request: Request, call_next):
     path = request.url.path
-    request.state.user = read_session(request.cookies.get(COOKIE_NAME))
-    if path.startswith("/api") and path not in PUBLIC_API and not request.state.user:
-        return JSONResponse({"detail": "Not logged in"}, status_code=401)
+    request.state.user = getattr(request.state, "user", None) or DEMO_USER
     response = await call_next(request)
     if path.startswith("/api"):
         response.headers["Cache-Control"] = "no-store"
@@ -43,31 +41,7 @@ async def require_session(request: Request, call_next):
     return response
 
 
-# --------------------------------------------------------------------------- auth
-
-
-class Login(BaseModel):
-    username: str = Field(max_length=64)
-    password: str = Field(max_length=256)
-
-
-@app.post("/api/login")
-def login(body: Login):
-    if not users.verify(body.username, body.password):
-        raise HTTPException(401, "Wrong user name or password")
-    resp = JSONResponse({"user": body.username})
-    resp.set_cookie(
-        COOKIE_NAME, make_session(body.username), max_age=settings.session_max_age, httponly=True,
-        samesite="lax", secure=settings.cookie_secure, path="/",
-    )
-    return resp
-
-
-@app.post("/api/logout")
-def logout():
-    resp = JSONResponse({"ok": True})
-    resp.delete_cookie(COOKIE_NAME, path="/")
-    return resp
+# --------------------------------------------------------------------------- session
 
 
 @app.get("/api/me")
@@ -95,9 +69,25 @@ def _public_meta(meta: dict) -> dict:
     return out
 
 
+_sample_lock = threading.Lock()
+
+
+def _ensure_sample(user: str) -> Dataset | None:
+    """Load the bundled challenge sample into an empty workspace (first visit, or after the disk was wiped)."""
+    path = settings.sample_dir / "supplier_risk_dataset.csv"
+    with _sample_lock:
+        if registry.get(user) is None and path.exists():
+            try:
+                registry.replace(user, path, "supplier_risk_dataset.csv (challenge sample)", descriptions.builtin())
+                _engines.pop(user, None)
+            except DatasetError as exc:
+                log.error("Could not load the bundled sample: %s", exc)
+    return registry.get(user)
+
+
 @app.get("/api/dataset")
 def dataset_info(user: str = Depends(current_user)):
-    ds = registry.get(user)
+    ds = registry.get(user) or _ensure_sample(user)
     if ds is None:
         return {"loaded": False}
     meta = _public_meta(ds.meta)

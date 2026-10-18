@@ -104,9 +104,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .get<Me>("/api/me")
       .then(setMe)
       .catch(() => setMe(null));
-    const onUnauth = () => setMe(null);
-    window.addEventListener("sc:unauthorized", onUnauth);
-    return () => window.removeEventListener("sc:unauthorized", onUnauth);
   }, []);
 
   const refreshMeta = useCallback(async () => {

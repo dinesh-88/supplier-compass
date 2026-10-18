@@ -25,11 +25,9 @@ set +a
 PLATFORM="${PLATFORM:-cpu-d3}"
 PRESET="${PRESET:-4vcpu-16gb}"
 DATA_DIR="${DATA_DIR:-/tmp/data}"
-for v in REGISTRY_NAME ENDPOINT_NAME APP_USERS SESSION_SECRET; do
+for v in REGISTRY_NAME ENDPOINT_NAME; do
   [[ -n "${!v:-}" ]] || die "$v is empty in $ENV_FILE."
 done
-(( ${#SESSION_SECRET} >= 16 )) || die "SESSION_SECRET must be at least 16 characters."
-[[ "$APP_USERS" != *change-me* ]] || die "Set a real password in APP_USERS (it still says change-me)."
 [[ -n "${LLM_API_KEY:-}" ]] || say "LLM_API_KEY is empty: chat, research and memo prose will be off."
 [[ -n "${TAVILY_API_KEY:-}" ]] || say "TAVILY_API_KEY is empty: company research will be off."
 
@@ -107,12 +105,12 @@ else
   say "No subnet named 'default…' found; letting Nebius pick the project's default subnet."
 fi
 
-ENV_ARGS=(--env "DATA_DIR=$DATA_DIR" --env "COOKIE_SECURE=1")
-for v in APP_USERS SESSION_SECRET LLM_BASE_URL LLM_API_KEY LLM_MODEL LLM_FAST_MODEL TAVILY_API_KEY; do
+ENV_ARGS=(--env "DATA_DIR=$DATA_DIR")
+for v in LLM_BASE_URL LLM_API_KEY LLM_MODEL LLM_FAST_MODEL TAVILY_API_KEY; do
   [[ -n "${!v:-}" ]] && ENV_ARGS+=(--env "$v=${!v}")
 done
 
-# No --auth token: browsers cannot send it; the app's own login protects every /api route.
+# No --auth token: browsers cannot send it. The app has no login: anyone with the URL uses the shared demo workspace.
 say "Creating endpoint '$ENDPOINT_NAME' on $PLATFORM / $PRESET"
 nebius ai endpoint create \
   --name "$ENDPOINT_NAME" \
@@ -164,12 +162,9 @@ if [[ "$code" != 200 ]]; then
   die "$URL/health returned HTTP $code, expected 200. Logs above; more with: nebius ai endpoint logs $ENDPOINT_ID --since 1h"
 fi
 
-# Sign in as the first APP_USERS entry to prove the env reached the container intact.
-first="${APP_USERS%%,*}"
-login_body=$(jq -cn --arg u "${first%%:*}" --arg p "${first#*:}" '{username: $u, password: $p}')
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -H 'content-type: application/json' \
-  --data @- "$URL/api/login" <<<"$login_body" || true)
-[[ "$code" == 200 ]] || die "/health is fine but logging in as '${first%%:*}' returned HTTP $code. Check APP_USERS."
+# The first dataset request loads the bundled sample into the empty workspace: check it and warm it up.
+rows=$(curl -s --max-time 120 "$URL/api/dataset" | jq -r 'if .loaded then .row_count else 0 end' 2>/dev/null || echo 0)
+[[ "${rows:-0}" -gt 0 ]] || die "/health is fine but the sample dataset did not load (GET $URL/api/dataset)."
 
 cat >&2 <<EOF
 
@@ -177,7 +172,8 @@ $(printf '\033[1;32mDeployed.\033[0m')
   URL       $URL
   Image     $IMAGE
   Endpoint  $ENDPOINT_ID
-  Health    200, login as '${first%%:*}' OK
+  Health    200, sample loaded ($rows suppliers)
+  Open      $URL  (no login; opens on Explore)
   Logs      nebius ai endpoint logs $ENDPOINT_ID --follow
 EOF
 echo "$URL"

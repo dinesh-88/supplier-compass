@@ -1,15 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-test("log in → filter → add 3 to compare → compare → ask → memo", async ({ page }) => {
+test("open → Explore with the sample → filter → add 3 to compare → compare → ask → memo", async ({ page }) => {
+  // No login: the app opens on Explore with the challenge sample already loaded.
   await page.goto("/");
-  await page.fill('input[name="username"]', "jury");
-  await page.fill('input[name="password"]', "jury-e2e");
-  await page.click("button:has-text('Sign in')");
-
-  // Fresh user: Upload page, load the challenge sample.
-  await page.getByTestId("load-sample").click();
-  await expect(page.getByTestId("formula")).toContainText("verified");
-  await page.getByRole("link", { name: "Explore" }).click();
+  await expect(page).toHaveURL(/\/explore$/);
 
   // Filter: exposure list (top 10% spend and Critical).
   await expect(page.getByTestId("match-count")).toHaveText("10,000");

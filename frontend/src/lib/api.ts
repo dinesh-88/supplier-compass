@@ -26,7 +26,6 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
         : typeof data === "object" && data && "error" in data
           ? String((data as { error: unknown }).error)
           : `Request failed (${res.status})`;
-    if (res.status === 401 && url !== "/api/login") window.dispatchEvent(new Event("sc:unauthorized"));
     throw new ApiError(res.status, detail, data);
   }
   return data as T;

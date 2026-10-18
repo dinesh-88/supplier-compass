@@ -1,12 +1,11 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { api } from "../lib/api";
 import { useStore } from "../lib/store";
 import SupplierDrawer from "./SupplierDrawer";
 import ChatPanel from "./ChatPanel";
 import { Badge } from "./ui";
 
 export default function Layout() {
-  const { me, setMe, meta, compare, openChat, chat, drawerId, toast } = useStore();
+  const { me, meta, compare, openChat, chat, drawerId, toast } = useStore();
   const loaded = !!meta && meta.loaded;
 
   const link = ({ isActive }: { isActive: boolean }) =>
@@ -46,16 +45,6 @@ export default function Layout() {
               Ask
             </button>
           )}
-          <span className="text-sm text-ink-2">{me?.user}</span>
-          <button
-            className="btn-ghost"
-            onClick={async () => {
-              await api.post("/api/logout");
-              setMe(null);
-            }}
-          >
-            Log out
-          </button>
         </div>
       </header>
       <div className="relative flex min-h-0 flex-1">

@@ -1,10 +1,6 @@
 import io
 
-from fastapi.testclient import TestClient
-
-from app.main import app
-
-from .conftest import login
+from .conftest import client_for
 
 HEADER = "supplierID,Supplier Name,Total_Risk_Index,Alpha_Score,Beta_Score,Comment\n"
 
@@ -20,8 +16,8 @@ def _upload(client, data: bytes, md: bytes | None = None, replace=True):
     return client.post("/api/dataset/upload", files=files, data={"replace": str(replace).lower()})
 
 
-def _client(user="other", pw="other-pass"):
-    return login(TestClient(app), user, pw)
+def _client(user="other"):
+    return client_for(user)
 
 
 def test_validation_report_drops_bad_rows():
@@ -63,7 +59,9 @@ def test_missing_required_columns_rejected():
     r = _upload(c, _csv(["S1,x,50"], header="supplierID,Name,Other\n"))
     assert r.status_code == 422
     assert "Total_Risk_Index" in r.json()["error"]
-    assert c.get("/api/dataset").json() == {"loaded": False}
+    # Nothing from the rejected file was kept; the empty workspace falls back to the bundled sample.
+    assert "challenge sample" in c.get("/api/dataset").json()["file_name"]
+    c.delete("/api/dataset")
 
 
 def test_replace_requires_confirmation_and_users_are_isolated(sample_client):
@@ -72,7 +70,7 @@ def test_replace_requires_confirmation_and_users_are_isolated(sample_client):
     assert _upload(c, _csv(rows)).status_code == 200
     r = _upload(c, _csv(rows), replace=False)
     assert r.status_code == 409
-    # The jury user's sample is untouched by the other user's upload.
+    # The demo workspace's sample is untouched by the other user's upload.
     assert sample_client.get("/api/dataset").json()["row_count"] == 10_000
     assert c.get("/api/dataset").json()["row_count"] == 5
     assert c.get("/api/suppliers/SUPP_00018").status_code == 404

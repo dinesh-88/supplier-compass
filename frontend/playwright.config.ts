@@ -17,7 +17,7 @@ export default defineConfig({
     },
     {
       command:
-        `rm -rf ../var-e2e && cd ../backend && DATA_DIR=../var-e2e APP_USERS=jury:jury-e2e SESSION_SECRET=e2e-session-secret-0123456789 ` +
+        `rm -rf ../var-e2e && cd ../backend && DATA_DIR=../var-e2e ` +
         `LLM_BASE_URL=http://127.0.0.1:${LLM_PORT}/v1/ LLM_API_KEY=e2e LLM_MODEL=e2e-fake TAVILY_API_KEY= ` +
         `STATIC_DIR=../frontend/dist ${python} -m uvicorn app.main:app --port ${PORT}`,
       url: `http://127.0.0.1:${PORT}/health`,

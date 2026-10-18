@@ -4,7 +4,6 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
 import { StoreProvider, useStore } from "./lib/store";
 import Layout from "./components/Layout";
-import Login from "./pages/Login";
 import Upload from "./pages/Upload";
 import Explore from "./pages/Explore";
 import Compare from "./pages/Compare";
@@ -16,7 +15,7 @@ import { Spinner } from "./components/ui";
 function Gate() {
   const { me, meta } = useStore();
   if (me === undefined) return <Centered><Spinner label="Loading…" /></Centered>;
-  if (me === null) return <Login />;
+  if (me === null) return <Centered><p className="text-sm text-lv-high">The server is not reachable. Reload the page to try again.</p></Centered>;
   if (meta === null) return <Centered><Spinner label="Loading dataset…" /></Centered>;
   const loaded = meta.loaded;
   return (
@@ -28,7 +27,7 @@ function Gate() {
         <Route path="/analyses" element={loaded ? <Analyses /> : <Navigate to="/upload" replace />} />
         <Route path="/research" element={<Research />} />
         <Route path="/memo" element={loaded ? <Memo /> : <Navigate to="/upload" replace />} />
-        <Route path="*" element={<Navigate to={loaded ? "/explore" : "/upload"} replace />} />
+        <Route path="*" element={<Navigate to="/explore" replace />} />
       </Route>
     </Routes>
   );

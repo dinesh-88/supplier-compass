@@ -13,7 +13,7 @@ web carries a source link returned by a search tool.
 - [Run with Docker](#run-with-docker)
 - [Deploy on a Nebius VM](#deploy-on-a-nebius-vm)
 - [Deploy on Nebius](#deploy-on-nebius)
-- [Jury logins](#jury-logins)
+- [No login: the demo workspace](#no-login-the-demo-workspace)
 - [How the brief is met](#how-the-brief-is-met)
 - [Two-minute demo script](#two-minute-demo-script)
 - [Risk-analysis plugins](docs/PLUGINS.md)
@@ -31,13 +31,13 @@ python3 -m venv .venv
 
 cd frontend && npm ci && npm run build && cd ..        # builds frontend/dist, served by the backend
 
-cp .env.example .env                                   # then edit: APP_USERS, SESSION_SECRET, keys
+cp .env.example .env                                   # then add LLM_API_KEY, TAVILY_API_KEY
 cd backend
 set -a; . ../.env; set +a
 ../.venv/bin/uvicorn app.main:app --port 8000
 ```
 
-Open <http://localhost:8000>, sign in, and click **Load the challenge sample**.
+Open <http://localhost:8000>. There is no login: the app opens on Explore with the challenge sample loaded.
 
 **Keys.** Chat and memo prose need `LLM_API_KEY`; company research needs `TAVILY_API_KEY` and `LLM_API_KEY`.
 Without them the header shows "LLM not configured" / "Search not configured", the chat answers with a
@@ -49,12 +49,12 @@ supplier drawer need no keys.
 ## Run with Docker
 
 ```bash
-cp .env.example .env      # set APP_USERS, SESSION_SECRET, LLM_API_KEY, TAVILY_API_KEY
+cp .env.example .env      # set LLM_API_KEY, TAVILY_API_KEY
 docker compose up -d --build
 ```
 
 One linux/amd64 image (about 170 MB compressed): a Node stage builds the frontend, then a Python 3.12 slim image
-serves it with the API on port 8080 as a non-root user. `GET /health` returns 200 without a login.
+serves it with the API on port 8080 as a non-root user. `GET /health` returns 200.
 The sanctions lists are downloaded **at build time** and cached in the image. If the download fails, the build
 still succeeds and the app reports the lists as unavailable. User datasets and research reports live in the
 `app-data` volume (`/data`). Set `PORT` in `.env` to publish on a port other than 8080.
@@ -74,11 +74,11 @@ The app is CPU-only and small: one container, about 165 MB resident memory with 
 4. **Deploy**:
    ```bash
    git clone <this repo> supplier-compass && cd supplier-compass
-   cp .env.example .env && nano .env      # APP_USERS, SESSION_SECRET, LLM_API_KEY (Nebius Token Factory), TAVILY_API_KEY
+   cp .env.example .env && nano .env      # LLM_API_KEY (Nebius Token Factory), TAVILY_API_KEY
    docker compose up -d --build
    ```
    The app is now at `http://<vm-ip>:8080`.
-5. **HTTPS (recommended for the jury).** Point a DNS name at the VM, set `COOKIE_SECURE=1` in `.env`, and put
+5. **HTTPS (recommended for the jury).** Point a DNS name at the VM and put
    Caddy in front ([install guide](https://caddyserver.com/docs/install)). It fetches certificates automatically: 
    ```bash
    # after installing Caddy:
@@ -110,22 +110,22 @@ Any OpenAI-compatible endpoint and tool-calling model works via `LLM_BASE_URL` a
 **Deploy with one command**
 
 ```bash
-cp deploy.env.example deploy.env    # git-ignored: names, APP_USERS, SESSION_SECRET, LLM_API_KEY, TAVILY_API_KEY
+cp deploy.env.example deploy.env    # git-ignored: names, LLM_API_KEY, TAVILY_API_KEY
 scripts/deploy_nebius.sh
 ```
 
 The script:
 
-1. checks `deploy.env` (it refuses an empty `SESSION_SECRET` or a `change-me` password);
+1. checks `deploy.env`, the tools and the Docker daemon;
 2. creates the registry `REGISTRY_NAME` if needed and runs `nebius registry configure-helper`;
 3. builds and pushes `cr.<region>.nebius.cloud/<registry id>/supplier-compass:<git short sha>`, taking the host
    from the registry (it lives in the project's region, whatever `REGION_ID` says) (`-dirty` is
    appended when there are uncommitted changes);
 4. runs `nebius ai endpoint create` with `--public --container-port 8080 --disk-size 20Gi`, the project's
-   default subnet and one `--env` per app variable, plus `COOKIE_SECURE=1`. There is no `--auth token`: browsers
-   cannot send it, and the app's own login protects every `/api` route;
+   default subnet and one `--env` per app variable. There is no `--auth token`: browsers cannot send it. The app
+   has no login either, so **anyone with the URL can use it** (and your LLM and Tavily keys through it);
 5. waits until the endpoint is `RUNNING`, prints its `https://` URL, then checks that `/health` returns 200 and
-   that the first `APP_USERS` user can log in. If either fails, it prints the last log lines and exits non-zero.
+   that `/api/dataset` loads the bundled sample (which also warms it up). If either fails, it prints the last log lines and exits non-zero.
 
 **Redeploying.** The Nebius CLI has no `endpoint update` command, so a new image means deleting and re-creating
 the endpoint, and its URL may change. If the endpoint already exists, the script shows its state and URL and
@@ -133,8 +133,8 @@ asks you to type the endpoint name before it deletes anything. Without a termina
 built and pushed before the old endpoint is deleted.
 
 **Storage.** The container's disk is treated as temporary: `DATA_DIR=/tmp/data` may be wiped on any restart.
-The challenge sample is bundled in the image, so **Load the challenge sample** always works; uploaded datasets
-and research reports may be lost.
+The challenge sample is bundled in the image and loads automatically whenever the workspace is empty; uploaded
+datasets and research reports may be lost.
 
 **Logs**
 
@@ -144,42 +144,32 @@ nebius ai endpoint logs <endpoint-id> --follow            # stream the logs
 nebius ai endpoint logs <endpoint-id> --since 2h --tail 200
 ```
 
-At startup the app logs one line with the data directory, user names and which features are on. Passwords,
-the session secret and API keys are never logged. The secrets are visible to anyone with access to the endpoint's
-spec in the project; for stricter handling, store them in MysteryBox and switch the script to `--env-secret`.
+At startup the app logs one line with the data directory and which features are on. API keys are never logged.
+They are visible to anyone with access to the endpoint's spec in the project; for stricter handling, store them in
+MysteryBox and switch the script to `--env-secret`.
 
-**Test the jury login from a private window**
+**Check it from a private window.** Open the printed URL in a private (incognito) window: it should go straight
+to Explore with 10,000 suppliers, with no sign-in page.
 
-1. Open a private (incognito) window, so no cookie from an earlier session is reused.
-2. Go to the URL the script printed. You should see the sign-in page. `https://<url>/api/me` should return
-   `{"detail":"Not logged in"}`.
-3. Sign in with a name and password from `APP_USERS`. A wrong password shows "Wrong user name or password".
-4. Click **Load the challenge sample** and open Explore. Each juror name has its own workspace.
-5. Close the window and open a new private one: you should be asked to sign in again.
+## No login: the demo workspace
 
-## Jury logins
-
-Users come from one environment variable: `APP_USERS="jury:<password>,alice:<password2>"`. Passwords are
-hashed (PBKDF2-SHA256, random salt) at startup and the plain text is not kept. The session is a signed,
-HTTP-only, SameSite=Lax cookie (12 hours), signed with `SESSION_SECRET`; the app refuses to start without it (or
-without `APP_USERS`), so sessions always survive restarts. Every `/api` route except `/api/login` requires a session. Each user has their own dataset
-and research reports under `DATA_DIR/<user>/`, so two users never see each other's data. Jurors who share
-one login share its dataset; give each juror their own name if they should not.
+There is no sign-in. Every visitor works as the user `demo`, in one shared workspace under `DATA_DIR/demo/`. The
+workspace is fixed on the server; nothing a browser sends can switch it. When the workspace is empty (first
+visit, or after the disk was wiped) the bundled challenge sample is loaded automatically, and `/` redirects to
+Explore. An upload replaces the dataset **for everyone** until it is replaced again, and research reports are
+shared too. Anyone with the URL can use the chat and research, which spend your LLM and Tavily credits.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `APP_USERS` | **required** | `name:password` pairs, comma-separated |
-| `SESSION_SECRET` | **required** | signs session cookies (16+ characters) |
-| `COOKIE_SECURE` | `0` | `1` behind HTTPS |
 | `LLM_BASE_URL` | Nebius Token Factory | OpenAI-compatible endpoint |
 | `LLM_API_KEY` | (empty) | required for chat, research and memo prose |
 | `LLM_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | chat and memo model (needs tool calling) |
 | `LLM_FAST_MODEL` | `LLM_MODEL` | research planning, triage and summary |
 | `LLM_REASONING_TOKENS` | `3000` | extra completion tokens for models that reason before answering (Nemotron 3) |
 | `TAVILY_API_KEY` | (empty) | required for research (web search and extraction) |
-| `DATA_DIR` | `/tmp/data` (compose: `/data` volume) | per-user DuckDB files and reports; may be wiped, the bundled sample always loads |
+| `DATA_DIR` | `/tmp/data` (compose: `/data` volume) | DuckDB file and reports of the `demo` workspace; may be wiped, the sample reloads automatically |
 
 ## How the brief is met
 
@@ -332,7 +322,7 @@ text label. Tabular numerals throughout, a 15 px base font, and layouts checked 
 
 | Time | Action | Say |
 |---|---|---|
-| 0:00 | Sign in. Click **Load the challenge sample**. | "Upload any supplier file; it's validated first. The app reverse-engineers the risk formula: verified on 10,000 of 10,000 rows, these weights." |
+| 0:00 | Open the app; the sample is already loaded. Show the **Upload** page. | "Upload any supplier file; it's validated first. The app reverse-engineers the risk formula: verified on 10,000 of 10,000 rows, these weights." |
 | 0:15 | Go to **Explore**. Toggle **Exposure list**. | "44 suppliers are in the top 10% by spend and Critical: that's where the money is at risk." Point at the scatter. |
 | 0:30 | Click **Safety-critical component**. | "For brake parts I weight safety and quality up. Custom index next to the official one; see who moves: ↑ 66 places." |
 | 0:45 | Search SUPP_00018, open the drawer. | "Why 80? Waterfall: Operational Resilience +4.5, Compliance +3.8, Governance +2.4 points above average. Exact, not a guess." |
@@ -344,14 +334,14 @@ text label. Tabular numerals throughout, a 15 px base font, and layouts checked 
 ## Tests
 
 ```bash
-cd backend && ../.venv/bin/python -m pytest          # 93 tests
+cd backend && ../.venv/bin/python -m pytest          # 90 tests
 cd frontend && npx tsc -b                            # type-check
 cd frontend && npm run build && npx playwright test  # smoke test (starts the backend and a test-only fake LLM)
 ```
 
 Backend tests cover: index reconstruction for every row, the exact weights and the "verified" status, rounding
 ties, level bands and the fallback, the approximate case; upload validation, size limit, replace confirmation,
-user isolation and the Markdown fallback; the SQL guard (INSERT/UPDATE/DELETE/DDL, multiple statements, other
+workspace isolation and the Markdown fallback; the SQL guard (INSERT/UPDATE/DELETE/DDL, multiple statements, other
 tables, table functions, file access, LIMIT); explain_index for SUPP_00018; the financial-risk ambiguity with
 a scripted LLM; the tool loop with a scripted LLM (including a rejected query and the "no tools" challenge); the
 research agent against a faked Tavily HTTP API (plan, follow-up on a red flag, the 25-search budget, verification
@@ -360,15 +350,16 @@ and PDF export; the plugin registry and fault tree engine (gate math, exactness 
 brute-force enumeration, minimal cut sets, the API, unavailability on datasets without the columns, the chat
 tool); the scenario simulator (shock proportional to exposure, index recomputed with the dataset formula,
 severity monotonicity, alternatives, validation of the LLM's mapping, presets without an LLM, the chat tool);
-and auth on every `/api` route.
+no login (everyone is `demo`, the workspace cannot be chosen over HTTP), the sample loading into an empty
+workspace, and `/health`.
 
-The Playwright smoke test logs in, loads the sample, filters to the exposure list, adds 3 suppliers to
+The Playwright smoke test opens `/`, lands on Explore with the sample loaded, filters to the exposure list, adds 3 suppliers to
 compare, opens Compare, asks a question (answered by a test-only fake LLM through the real tool loop) and checks the trace, runs the fault tree and a scenario preset, then generates and downloads the memo.
 
 ## Design decisions
 
-- **Per-user data, not per-session.** Each user name gets its own DuckDB file, so a juror who logs in again
-  keeps their dataset. Separate users never share data.
+- **One shared demo workspace, no login.** Every visitor is `demo`; the code keeps one DuckDB file per user
+  name, so adding logins back later only means setting `request.state.user` from a session again.
 - **Filtering happens in the browser.** The backend computes every derived field and the custom index; the
   browser receives all 10,000 rows once (about 460 KB gzipped) and filters them with no network round-trip.
 - **Ranks are competition ranks on the integer index** (1 = lowest risk, ties share a rank). The custom index is
