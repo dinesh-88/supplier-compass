@@ -234,7 +234,7 @@ def presets(ds: Dataset = Depends(dataset_for)):
 @app.post("/api/custom-index")
 def custom_index(body: WeightsBody, ds: Dataset = Depends(dataset_for)):
     try:
-        res = wmod.custom_index(ds, body.weights or {})
+        res = wmod.custom_index(ds, body.weights or ds.formula["weights"])
     except ValueError as exc:
         raise HTTPException(422, str(exc))
     return {
