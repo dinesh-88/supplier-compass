@@ -9,14 +9,19 @@ import { Badge, Spinner } from "../components/ui";
 type ParamSpec = {
   key: string;
   label: string;
-  type: "number" | "select" | "boolean";
+  type: "number" | "select" | "boolean" | "text";
   default: number | string | boolean;
   help?: string;
   min?: number;
   max?: number;
   step?: number;
   options?: { value: string; label: string }[];
+  widget?: "slider" | "textarea";
+  max_length?: number;
+  placeholder?: string;
+  zero_label?: string;
 };
+type Preset = { label: string; params: Record<string, unknown>; help?: string };
 type PluginInfo = {
   id: string;
   name: string;
@@ -27,6 +32,7 @@ type PluginInfo = {
   min_suppliers: number;
   max_suppliers: number;
   params: ParamSpec[];
+  presets: Preset[];
 };
 type RunResult = { plugin_name: string; title: string; summary: string; assumptions: string[]; blocks: Block[]; ids: string[]; params: Record<string, unknown> };
 
@@ -42,6 +48,7 @@ export default function Analyses() {
 
   const pluginId = search.get("plugin") ?? list?.find((p) => p.available)?.id ?? "";
   const urlIds = search.get("ids");
+  const urlParams = search.get("params");
   const ids = useMemo(() => (urlIds ? urlIds.split(",").filter(Boolean) : compare), [urlIds, compare]);
   const plugin = list?.find((p) => p.id === pluginId) ?? null;
 
@@ -49,17 +56,28 @@ export default function Analyses() {
     api.get<PluginInfo[]>("/api/plugins").then(setList).catch((e) => setErr(e.message));
   }, []);
 
-  useEffect(() => {
-    if (plugin) setValues(Object.fromEntries(plugin.params.map((p) => [p.key, p.default])));
-    setResult(null);
-  }, [plugin]);
+  const initialValues = (pl: PluginInfo): Record<string, unknown> => {
+    let fromUrl: Record<string, unknown> = {};
+    try {
+      fromUrl = urlParams ? JSON.parse(urlParams) : {};
+    } catch {
+      /* ignore a malformed link */
+    }
+    return Object.fromEntries(pl.params.map((p) => [p.key, p.key in fromUrl ? fromUrl[p.key] : p.default]));
+  };
 
-  async function run() {
+  useEffect(() => {
+    if (plugin) setValues(initialValues(plugin));
+    setResult(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plugin, urlParams]);
+
+  async function run(params: Record<string, unknown> = values) {
     if (!plugin) return;
     setBusy(true);
     setErr(null);
     try {
-      setResult(await api.post<RunResult>(`/api/plugins/${plugin.id}/run`, { ids, params: values }));
+      setResult(await api.post<RunResult>(`/api/plugins/${plugin.id}/run`, { ids, params }));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -69,9 +87,9 @@ export default function Analyses() {
 
   useEffect(() => {
     // Opened from the assistant or the Compare page with suppliers in the URL: run straight away.
-    if (plugin?.available && urlIds && !result && !busy) run();
+    if (plugin?.available && urlIds !== null && ids.length >= plugin.min_suppliers && !busy) run(initialValues(plugin));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plugin, urlIds]);
+  }, [plugin, urlIds, urlParams]);
 
   // Analyses need suppliers: prompt for them as soon as the tab opens with none selected.
   useEffect(() => {
@@ -125,7 +143,9 @@ export default function Analyses() {
               {ids.length ? (
                 <div className="flex flex-wrap gap-1">{ids.map((id) => <Badge key={id}>{id}</Badge>)}</div>
               ) : (
-                <p className="text-xs text-ink-3">No suppliers selected.</p>
+                <p className="text-xs text-ink-3">
+                  No suppliers selected.{plugin.min_suppliers === 0 ? " Optional here: select some to see their before/after." : ""}
+                </p>
               )}
               {!urlIds && (
                 <button className="btn-ghost mt-1 text-xs" onClick={() => setPicking(true)} data-testid="pick-suppliers">
@@ -134,10 +154,39 @@ export default function Analyses() {
               )}
               {tooMany && <p className="mt-1 text-xs text-lv-high">At most {plugin.max_suppliers} suppliers.</p>}
             </div>
+            {plugin.presets.length > 0 && (
+              <div className="text-sm">
+                <div className="mb-1 font-medium">Presets</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {plugin.presets.map((pr) => {
+                    // A preset stays highlighted while its non-numeric fields match, so adjusting a slider keeps it.
+                    const active = Object.entries(pr.params).every(
+                      ([k, v]) => plugin.params.find((p) => p.key === k)?.type === "number" || values[k] === v,
+                    );
+                    return (
+                      <button
+                        key={pr.label}
+                        title={pr.help}
+                        disabled={busy || tooMany || !plugin.available}
+                        onClick={() => {
+                          const next = { ...values, ...pr.params };
+                          setValues(next);
+                          if (!tooFew) run(next);
+                        }}
+                        className={`rounded-full border px-2.5 py-1 text-xs ${active ? "border-accent bg-accent-soft text-accent-strong" : "border-line hover:bg-canvas"} disabled:opacity-50`}
+                        data-testid={`preset-${pr.label}`}
+                      >
+                        {pr.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {plugin.params.map((p) => (
               <ParamField key={p.key} spec={p} value={values[p.key]} onChange={(v) => setValues((cur) => ({ ...cur, [p.key]: v }))} />
             ))}
-            <button className="btn-primary w-full justify-center" disabled={busy || tooFew || tooMany || !plugin.available} onClick={run} data-testid="run-analysis">
+            <button className="btn-primary w-full justify-center" disabled={busy || tooFew || tooMany || !plugin.available} onClick={() => run()} data-testid="run-analysis">
               {busy ? "Running…" : `Run ${plugin.name.toLowerCase()}`}
             </button>
             {!ids.length && <button className="btn w-full justify-center" onClick={() => setPicking(true)}>Select suppliers</button>}
@@ -178,8 +227,32 @@ export default function Analyses() {
 function ParamField({ spec, value, onChange }: { spec: ParamSpec; value: unknown; onChange: (v: unknown) => void }) {
   return (
     <label className="block text-sm">
-      <span className="mb-1 block font-medium">{spec.label}</span>
-      {spec.type === "select" ? (
+      <span className="mb-1 flex items-baseline justify-between font-medium">
+        {spec.label}
+        {spec.widget === "slider" && (
+          <span className="num text-xs text-ink-2">{Number(value ?? spec.default) === 0 && spec.zero_label ? spec.zero_label : String(value ?? spec.default)}</span>
+        )}
+      </span>
+      {spec.type === "text" ? (
+        <textarea
+          className="input w-full resize-y"
+          rows={2}
+          maxLength={spec.max_length}
+          placeholder={spec.placeholder}
+          value={String(value ?? spec.default)}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      ) : spec.widget === "slider" ? (
+        <input
+          type="range"
+          className="w-full accent-[var(--color-accent)]"
+          min={spec.min}
+          max={spec.max}
+          step={spec.step}
+          value={Number(value ?? spec.default)}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
+      ) : spec.type === "select" ? (
         <select className="input w-full" value={String(value ?? spec.default)} onChange={(e) => onChange(e.target.value)}>
           {spec.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>

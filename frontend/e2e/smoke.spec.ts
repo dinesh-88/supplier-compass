@@ -32,6 +32,13 @@ test("log in → filter → add 3 to compare → compare → ask → memo", asyn
   await expect(page.getByTestId("fault-tree").first()).toBeVisible();
   await page.goBack();
 
+  // Scenario simulator: a preset runs without the LLM.
+  await page.getByTestId("open-scenario").click();
+  await page.getByTestId("preset-Sanctions escalate").click();
+  await expect(page.getByTestId("analysis-result")).toContainText("Selected suppliers before and after");
+  await expect(page.getByTestId("analysis-result")).toContainText("Alternatives that stay low-risk");
+  await page.goBack();
+
   // Ask about these (answered by the test-only fake LLM through the real tool loop).
   await page.getByTestId("ask-about-these").click();
   await page.getByTestId("chat-input").fill("Why is the Total Risk Index of SUPP_00018 so high?");

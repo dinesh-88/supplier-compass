@@ -79,12 +79,15 @@ TOOL_SPECS = [
     {
         "name": "run_analysis",
         "description": "Run a risk-analysis plugin on suppliers, e.g. plugin 'fault_tree' (fault tree analysis of supply "
-        "failure: top-event probability, largest branch, most important cause, best mitigation). Probabilities are "
-        "illustrative and depend on stated assumptions; say so.",
+        "failure: top-event probability, largest branch, most important cause, best mitigation; probabilities are "
+        "illustrative, say so) or plugin 'scenario' (scenario simulator: params {\"scenario\": \"<disruption in plain "
+        "language>\", \"severity\": 0-100, 0 = suggested}; returns how many suppliers move into a higher level or "
+        "Critical, the purchase order volume affected, before/after for the given ids, which may be empty, and "
+        "low-risk alternatives; it is a what-if on the scores, not a forecast).",
         "parameters": {
             "type": "object",
             "properties": {
-                "plugin": {"type": "string", "description": "Plugin id, e.g. fault_tree"},
+                "plugin": {"type": "string", "description": "Plugin id: fault_tree or scenario"},
                 "ids": {"type": "array", "items": {"type": "string"}},
                 "params": {"type": "object", "description": "Optional plugin parameters"},
             },
@@ -228,7 +231,10 @@ class Toolbox:
             res = plugins.run(self.ds, plugin, self._ids(ids), params or {})
         except plugins.PluginError as exc:
             raise ToolError(str(exc)) from exc
-        self.actions.append({"type": "open_analysis", "plugin": plugin, "ids": res["ids"]})
+        action = {"type": "open_analysis", "plugin": plugin, "ids": res["ids"]}
+        if params:
+            action["params"] = res["params"]
+        self.actions.append(action)
         return {"plugin": res["plugin"], "summary": res["summary"], "assumptions": res["assumptions"],
                 "params": res["params"], "results": res["data"].get("chat") or _compact(res["data"])}
 

@@ -29,13 +29,17 @@ class Param:
 
     key: str
     label: str
-    type: str  # "number" | "select" | "boolean"
+    type: str  # "number" | "select" | "boolean" | "text"
     default: Any
     help: str = ""
     min: float | None = None
     max: float | None = None
     step: float | None = None
     options: list[dict] | None = None  # for select: [{"value", "label"}]
+    widget: str | None = None  # number: "slider"; text: "textarea"
+    max_length: int | None = None  # for text
+    placeholder: str | None = None
+    zero_label: str | None = None  # slider: what 0 means, e.g. "suggested"
 
     def coerce(self, value: Any) -> Any:
         if value is None:
@@ -49,6 +53,8 @@ class Param:
             return v
         if self.type == "boolean":
             return bool(value)
+        if self.type == "text":
+            return " ".join(str(value).split())[: self.max_length or 500]
         if self.type == "select":
             allowed = {o["value"] for o in self.options or []}
             return value if value in allowed else self.default
@@ -83,6 +89,10 @@ class RiskAnalysisPlugin(ABC):
     def params(self, ds: Dataset) -> list[Param]:
         return []
 
+    def presets(self, ds: Dataset) -> list[dict]:
+        """Optional one-click parameter sets, shown as buttons: [{"label", "params": {...}, "help"?}]."""
+        return []
+
     def available(self, ds: Dataset) -> tuple[bool, str]:
         missing = [c for c in self.requires_columns if c not in ds.score_cols and c not in ds.metrics]
         if missing:
@@ -101,6 +111,7 @@ class RiskAnalysisPlugin(ABC):
             "min_suppliers": self.min_suppliers,
             "max_suppliers": self.max_suppliers,
             "params": [p.spec() for p in self.params(ds)],
+            "presets": self.presets(ds),
         }
 
     def resolve_params(self, ds: Dataset, raw: dict | None) -> dict:

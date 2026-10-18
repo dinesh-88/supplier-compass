@@ -8,7 +8,7 @@ import { Badge, Spinner } from "./ui";
 
 type TraceEntry = { tool: string; args: Record<string, unknown>; ms: number; error?: string; sql?: string; result?: Record<string, unknown> };
 type Chart = { type: string; title: string; option: Record<string, unknown>; source: Record<string, unknown> };
-type Action = { type: "add_to_compare"; ids: string[] } | { type: "open_analysis"; plugin: string; ids: string[] };
+type Action = { type: "add_to_compare"; ids: string[] } | { type: "open_analysis"; plugin: string; ids: string[]; params?: Record<string, unknown> };
 type Reply = { answer: string; trace: TraceEntry[]; charts: Chart[]; actions: Action[]; model: string; error: boolean };
 type Msg = { role: "user"; content: string } | ({ role: "assistant"; content: string } & Partial<Reply>);
 
@@ -123,7 +123,7 @@ export default function ChatPanel() {
                     Add {a.ids.length} to compare
                   </button>
                 ) : a.type === "open_analysis" ? (
-                  <button key={j} className="btn mt-2 ml-2" onClick={() => nav(`/analyses?plugin=${a.plugin}&ids=${a.ids.join(",")}`)}>
+                  <button key={j} className="btn mt-2 ml-2" onClick={() => nav(`/analyses?plugin=${a.plugin}&ids=${a.ids.join(",")}${a.params ? `&params=${encodeURIComponent(JSON.stringify(a.params))}` : ""}`)}>
                     Open full analysis
                   </button>
                 ) : null,

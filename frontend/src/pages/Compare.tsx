@@ -90,6 +90,9 @@ export default function Compare() {
           <button className="btn" onClick={() => nav(`/analyses?plugin=fault_tree&ids=${compare.join(",")}`)} data-testid="open-fault-tree">
             Fault tree analysis
           </button>
+          <button className="btn" onClick={() => nav(`/analyses?plugin=scenario&ids=${compare.join(",")}`)} data-testid="open-scenario">
+            Scenario simulator
+          </button>
           <button className="btn-primary" onClick={() => nav("/memo")} data-testid="generate-memo">Generate shortlist memo</button>
         </div>
       </div>

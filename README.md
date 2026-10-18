@@ -217,14 +217,14 @@ radar, heatmap and scatter only) and `add_to_compare` (a UI button).
    per category in the dataset's band style with evidence quotes and links, searched-without-findings, sanctions,
    confidence with reasons, and the research date. Reports are saved per user and can be attached to the memo.
 
-### Risk-analysis plugins: fault tree analysis
+### Risk-analysis plugins: fault tree analysis and scenario simulator
 
 ![Fault tree](docs/screenshots/8-fault-tree.png)
 
 Analyses are plugins (`backend/app/plugins/`, guide in [docs/PLUGINS.md](docs/PLUGINS.md)). A plugin declares
 its parameters and required columns and returns generic blocks (metrics, tables, charts, tabs, fault trees).
-The **Analyses** page, the **Fault tree analysis** button on Compare and the assistant's `run_analysis` tool
-pick up new plugins automatically.
+The **Analyses** page, the **Fault tree analysis** and **Scenario simulator** buttons on Compare and the
+assistant's `run_analysis` tool pick up new plugins automatically.
 
 The first plugin is **fault tree analysis** of supply failure. The top event "supply of acceptable parts fails"
 is an OR of four branches: deliveries stop or are late, parts are unsafe or defective, the supplier becomes
@@ -234,6 +234,17 @@ event). Each basic event's probability comes from the supplier's risk score on a
 scale. The plugin computes exact top-event probabilities, minimal cut sets, Fussell-Vesely and Birnbaum
 importance and the most effective mitigation, and ranks the selected suppliers. Trees are JSON files, so new
 top events can be modelled without code.
+
+![Scenario simulator](docs/screenshots/9-scenario.png)
+
+The **scenario simulator** asks what a disruption does to the portfolio. The buyer types it in plain language
+or clicks a preset (flooding in Central Europe, sanctions escalate, credit crunch, ransomware wave, labour
+strikes) and sets the severity. The LLM maps free text to the score columns it worsens and suggests a severity;
+presets need no LLM. Because the data has no locations, each supplier's impacted scores rise in proportion to
+its exposure score; the Total Risk Index and levels are then recomputed with the dataset's formula. The result
+shows how many suppliers move into a higher level or into Critical, the purchase order volume affected,
+before/after for the selected suppliers and low-risk alternatives. The simulation (`backend/app/scenarios.py`)
+is separate from the UI and returns the shocked score matrix, so it can later drive the fault tree.
 
 ### Shortlist memo
 
@@ -269,7 +280,7 @@ text label. Tabular numerals throughout, a 15 px base font, and layouts checked 
 ## Tests
 
 ```bash
-cd backend && ../.venv/bin/python -m pytest          # 78 tests
+cd backend && ../.venv/bin/python -m pytest          # 89 tests
 cd frontend && npx tsc -b                            # type-check
 cd frontend && npm run build && npx playwright test  # smoke test (starts the backend and a test-only fake LLM)
 ```
@@ -283,10 +294,12 @@ research agent against a faked Tavily HTTP API (plan, follow-up on a red flag, t
 dropping unsourced and misquoted claims, single-source marking, sanctions possible-match); the memo number check
 and PDF export; the plugin registry and fault tree engine (gate math, exactness with repeated events against
 brute-force enumeration, minimal cut sets, the API, unavailability on datasets without the columns, the chat
-tool); and auth on every `/api` route.
+tool); the scenario simulator (shock proportional to exposure, index recomputed with the dataset formula,
+severity monotonicity, alternatives, validation of the LLM's mapping, presets without an LLM, the chat tool);
+and auth on every `/api` route.
 
 The Playwright smoke test logs in, loads the sample, filters to the exposure list, adds 3 suppliers to
-compare, opens Compare, asks a question (answered by a test-only fake LLM through the real tool loop) and checks the trace, then generates and downloads the memo.
+compare, opens Compare, asks a question (answered by a test-only fake LLM through the real tool loop) and checks the trace, runs the fault tree and a scenario preset, then generates and downloads the memo.
 
 ## Design decisions
 
