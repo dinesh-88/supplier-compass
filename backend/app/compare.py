@@ -123,6 +123,8 @@ def field_comparison(ds: Dataset, ids: list[str], fields: list[str]) -> dict:
         r = {"supplierID": ds.ids[i], "name": ds.names[i]}
         for c in columns:
             r[c] = _value(ds, i, c)
+            if c in ds.score_cols or c == "total_risk_index":
+                r[f"{c}_level"] = index_model.level_of(r[c], ds.bands)
         table.append(r)
 
     disagreements = []

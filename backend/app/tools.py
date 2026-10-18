@@ -159,6 +159,8 @@ class Toolbox:
             r = {"supplierID": sid, "name": ds.names[i]}
             for c in cols:
                 r[c] = self._value(i, c)
+                if c in ds.score_cols:
+                    r[f"{c}_level"] = index_model.level_of(r[c], ds.bands)
             r["level"] = index_model.level_of(ds.index[i], ds.bands)
             r["official_rank"] = int(ds.official_rank[i])
             rows.append(r)

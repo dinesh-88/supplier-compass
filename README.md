@@ -88,7 +88,7 @@ The app is CPU-only and small: one container, about 165 MB resident memory with 
 6. **Update** with `git pull && docker compose up -d --build`. Data persists in the `app-data` volume.
 
 Create the LLM key in Nebius Token Factory. The default endpoint is
-`https://api.tokenfactory.nebius.com/v1/` and the default model is `nvidia/Llama-3_3-Nemotron-Super-49B-v1_5`.
+`https://api.tokenfactory.nebius.com/v1/` and the default model is `nvidia/nemotron-3-super-120b-a12b`.
 Any OpenAI-compatible endpoint and tool-calling model works via `LLM_BASE_URL` and `LLM_MODEL`.
 `LLM_FAST_MODEL` (optional) is used for the research agent's planning, triage and summaries.
 
@@ -110,7 +110,7 @@ one login share its dataset; give each juror their own name if they should not.
 | `COOKIE_SECURE` | `0` | `1` behind HTTPS |
 | `LLM_BASE_URL` | Nebius Token Factory | OpenAI-compatible endpoint |
 | `LLM_API_KEY` | (empty → mock) | |
-| `LLM_MODEL` | `nvidia/Llama-3_3-Nemotron-Super-49B-v1_5` | chat and memo model (needs tool calling) |
+| `LLM_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | chat and memo model (needs tool calling) |
 | `LLM_FAST_MODEL` | `LLM_MODEL` | research planning, triage and summary |
 | `TAVILY_API_KEY` | (empty → mock) | web search and extraction |
 | `MOCK_LLM`, `MOCK_SEARCH` | `0` | force offline mode |

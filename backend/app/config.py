@@ -34,7 +34,7 @@ class Settings:
     )
     llm_api_key: str = field(default_factory=lambda: os.environ.get("LLM_API_KEY", ""))
     llm_model: str = field(
-        default_factory=lambda: os.environ.get("LLM_MODEL", "nvidia/Llama-3_3-Nemotron-Super-49B-v1_5")
+        default_factory=lambda: os.environ.get("LLM_MODEL", "nvidia/nemotron-3-super-120b-a12b")
     )
     llm_fast_model: str = field(default_factory=lambda: os.environ.get("LLM_FAST_MODEL", ""))
     tavily_api_key: str = field(default_factory=lambda: os.environ.get("TAVILY_API_KEY", ""))
