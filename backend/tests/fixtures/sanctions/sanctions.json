@@ -1,0 +1,8 @@
+{"generated_at": "2026-01-01T00:00:00+00:00",
+ "sources": [{"list": "OFAC SDN", "url": "https://www.treasury.gov/ofac/downloads/sdn.csv", "downloaded_at": "2026-01-01T00:00:00+00:00", "entries": 2, "available": true},
+             {"list": "EU consolidated", "url": "https://webgate.ec.europa.eu/fsd/fsf", "downloaded_at": "2026-01-01T00:00:00+00:00", "entries": 1, "available": true}],
+ "entries": [
+  {"list": "OFAC SDN", "id": "99901", "name": "ACME RAIL SYSTEMS LLC", "aliases": ["ACME RAILWAY SYSTEMS"], "type": "entity", "programs": "RUSSIA-EO14024", "url": "https://sanctionssearch.ofac.treas.gov/Details.aspx?id=99901"},
+  {"list": "OFAC SDN", "id": "99902", "name": "IVANOV, Ivan", "aliases": [], "type": "individual", "programs": "UKRAINE-EO13660", "url": "https://sanctionssearch.ofac.treas.gov/Details.aspx?id=99902"},
+  {"list": "EU consolidated", "id": "EU-7", "name": "Acme Rail Systems", "aliases": [], "type": "enterprise", "programs": "RUS", "country": "Russia", "url": "https://eur-lex.europa.eu/"}
+ ]}
