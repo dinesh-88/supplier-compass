@@ -110,7 +110,7 @@ Any OpenAI-compatible endpoint and tool-calling model works via `LLM_BASE_URL` a
 **Deploy with one command**
 
 ```bash
-cp deploy.env.example deploy.env    # git-ignored: REGION_ID, names, APP_USERS, SESSION_SECRET, LLM_API_KEY, TAVILY_API_KEY
+cp deploy.env.example deploy.env    # git-ignored: names, APP_USERS, SESSION_SECRET, LLM_API_KEY, TAVILY_API_KEY
 scripts/deploy_nebius.sh
 ```
 
@@ -118,7 +118,8 @@ The script:
 
 1. checks `deploy.env` (it refuses an empty `SESSION_SECRET` or a `change-me` password);
 2. creates the registry `REGISTRY_NAME` if needed and runs `nebius registry configure-helper`;
-3. builds and pushes `cr.$REGION_ID.nebius.cloud/<registry id>/supplier-compass:<git short sha>` (`-dirty` is
+3. builds and pushes `cr.<region>.nebius.cloud/<registry id>/supplier-compass:<git short sha>`, taking the host
+   from the registry (it lives in the project's region, whatever `REGION_ID` says) (`-dirty` is
    appended when there are uncommitted changes);
 4. runs `nebius ai endpoint create` with `--public --container-port 8080 --disk-size 20Gi`, the project's
    default subnet and one `--env` per app variable, plus `COOKIE_SECURE=1`. There is no `--auth token`: browsers

@@ -25,7 +25,7 @@ set +a
 PLATFORM="${PLATFORM:-cpu-d3}"
 PRESET="${PRESET:-4vcpu-16gb}"
 DATA_DIR="${DATA_DIR:-/tmp/data}"
-for v in REGION_ID REGISTRY_NAME ENDPOINT_NAME APP_USERS SESSION_SECRET; do
+for v in REGISTRY_NAME ENDPOINT_NAME APP_USERS SESSION_SECRET; do
   [[ -n "${!v:-}" ]] || die "$v is empty in $ENV_FILE."
 done
 (( ${#SESSION_SECRET} >= 16 )) || die "SESSION_SECRET must be at least 16 characters."
@@ -74,6 +74,12 @@ if [[ -z "$REGISTRY_ID" ]]; then
 else
   say "Using Container Registry '$REGISTRY_NAME' ($REGISTRY_ID)"
 fi
+# The registry lives in the project's region; take its host from the registry rather than trusting REGION_ID.
+REGISTRY_HOST=$(nebius registry get --id "$REGISTRY_ID" --format json | jq -r '.status.registry_fqdn // empty')
+[[ -n "$REGISTRY_HOST" ]] || REGISTRY_HOST="cr.${REGION_ID:?REGION_ID is empty and the registry reports no host}.nebius.cloud"
+if [[ -n "${REGION_ID:-}" && "$REGISTRY_HOST" != "cr.$REGION_ID.nebius.cloud" ]]; then
+  say "REGION_ID=$REGION_ID, but the registry is at $REGISTRY_HOST (the project's region); using $REGISTRY_HOST."
+fi
 nebius registry configure-helper >/dev/null
 
 # ---- build and push -------------------------------------------------------------------
@@ -82,7 +88,7 @@ if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
   say "Working tree has uncommitted changes; tagging the image $TAG-dirty."
   TAG="$TAG-dirty"
 fi
-IMAGE="cr.$REGION_ID.nebius.cloud/${REGISTRY_ID#registry-}/supplier-compass:$TAG"
+IMAGE="$REGISTRY_HOST/${REGISTRY_ID#registry-}/supplier-compass:$TAG"
 say "Building and pushing $IMAGE (linux/amd64)"
 docker buildx build --platform linux/amd64 --tag "$IMAGE" --push .
 
